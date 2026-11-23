@@ -86,6 +86,15 @@ def desnormalize_values(valor_normalizado, stats):
     """
     return stats[2] + valor_normalizado * (stats[1] - stats[0])
 
+def estima_preco(ano, km, c, tipo, data):
+    """Preço em R$ estimado pelo modelo para um carro (ano-modelo, km)."""
+    A, K = normalize_test_values(ano, km, data)
+    if tipo == 'lin':
+        X = np.array([1, A, K])
+    else:
+        X = np.array([1, A, K, A**2, A*K, K**2])
+    return desnormalize_values(X @ c, data['preco_stats'])
+
 if __name__ == "__main__":
     print("Passo 2 -> Normalizando os valores do onix...")
     onix_data = get_onix_normalizado()
@@ -125,32 +134,24 @@ if __name__ == "__main__":
     #TODO: Analisar agil assim como exigido
 
 
-    #Usar os modelos para estimar o preço do carro do Bob: modelo 2022 com 48000 km (passo 6)
+    print("Passo 6 - Estimando o preço do carro do Bob")
+    #Usar os modelos para estimar o preço do carro do Bob: modelo 2022 com 48000 km
     ano_test = 2022
     km_test = 48000
 
-    ano_test_normalized, km_test_normalized = normalize_test_values(ano_test, km_test, onix_data)
-
-    X_test_lin = np.array([
-            1,
-            ano_test_normalized,
-            km_test_normalized,
-        ])
-    preco_estimado_test_lin = X_test_lin @ c_lin
-
-    X_test_quad = np.array([
-        1,
-        ano_test_normalized,
-        km_test_normalized,
-        ano_test_normalized**2,
-        ano_test_normalized * km_test_normalized,
-        km_test_normalized**2,
-    ])
-    preco_estimado_test_quad = X_test_quad @ c_quad
-
-    # Volta o preço estimado para reais
-    preco_estimado_test_lin = desnormalize_values(preco_estimado_test_lin, onix_data['preco_stats'])
-    preco_estimado_test_quad = desnormalize_values(preco_estimado_test_quad, onix_data['preco_stats'])
+    preco_estimado_test_lin = estima_preco(ano_test, km_test, c_lin, 'lin', onix_data)
+    preco_estimado_test_quad = estima_preco(ano_test, km_test, c_quad, 'quad', onix_data)
 
     print(f"Preço estimado para o carro com ano {ano_test} e km {km_test} (modelo linear): R$ {preco_estimado_test_lin:.2f}")
     print(f"Preço estimado para o carro com ano {ano_test} e km {km_test} (modelo quadrático): R$ {preco_estimado_test_quad:.2f}")
+
+    print("Passo 7 - Depreciação")
+    for tipo, c in [('lin', c_lin), ('quad', c_quad)]:
+        atual = estima_preco(2022, 48000, c, tipo, onix_data)
+
+        dep_8000 = atual - estima_preco(2022, 56000, c, tipo, onix_data)
+        dep_10000 = atual - estima_preco(2022, 58000, c, tipo, onix_data)
+        dep_1ano = atual - estima_preco(2021, 48000, c, tipo, onix_data)
+
+        print(f"[{tipo}] +8000 km: R$ {dep_8000:.2f} ({100*dep_8000/atual:.2f}%)")
+        print(f"[{tipo}] +10000 km: R$ {dep_10000:.2f} ({100*dep_10000/atual:.2f}%) | 1 ano mais velho: R$ {dep_1ano:.2f} ({100*dep_1ano/atual:.2f}%)")
