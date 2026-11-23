@@ -134,7 +134,7 @@ if __name__ == "__main__":
     #TODO: Analisar agil assim como exigido
 
 
-    print("Passo 6 - Estimando o preço do carro do Bob")
+    print("Passo 6 -> Estimando o preço do carro do Bob")
     #Usar os modelos para estimar o preço do carro do Bob: modelo 2022 com 48000 km
     ano_test = 2022
     km_test = 48000
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     print(f"Preço estimado para o carro com ano {ano_test} e km {km_test} (modelo linear): R$ {preco_estimado_test_lin:.2f}")
     print(f"Preço estimado para o carro com ano {ano_test} e km {km_test} (modelo quadrático): R$ {preco_estimado_test_quad:.2f}")
 
-    print("Passo 7 - Depreciação")
+    print("Passo 7 -> Depreciação")
     for tipo, c in [('lin', c_lin), ('quad', c_quad)]:
         atual = estima_preco(2022, 48000, c, tipo, onix_data)
 
@@ -155,3 +155,29 @@ if __name__ == "__main__":
 
         print(f"[{tipo}] +8000 km: R$ {dep_8000:.2f} ({100*dep_8000/atual:.2f}%)")
         print(f"[{tipo}] +10000 km: R$ {dep_10000:.2f} ({100*dep_10000/atual:.2f}%) | 1 ano mais velho: R$ {dep_1ano:.2f} ({100*dep_1ano/atual:.2f}%)")
+
+    print("Passo 9 -> Veículo elétrico (Dolphin Mini)")
+    dolphin_data = get_dolphin_normalizado()
+    [M_dol, b_dol, c_dol] = mq.solucao_sistema(dolphin_data['ano'], dolphin_data['km'], dolphin_data['preco'], 'lin')
+    print(f"Coeficientes do Dolphin (linear): {c_dol}")
+
+    X_dol = np.column_stack((np.ones_like(dolphin_data['ano']), dolphin_data['ano'], dolphin_data['km']))
+    preco_real_dol = desnormalize_values(dolphin_data['preco'], dolphin_data['preco_stats'])
+    preco_estimado_dol = desnormalize_values(X_dol @ c_dol, dolphin_data['preco_stats'])
+
+    reqm_dol = mq.REQM(preco_estimado_dol, preco_real_dol)
+    agio_dol = mq.agio_percentual(preco_estimado_dol, preco_real_dol)
+    print(f"REQM Dolphin: R$ {reqm_dol:.2f}")
+
+    # Depreciação no carro médio de cada amostra (os dois carros não têm anos em comum)
+    for nome, data, c in [('Onix', onix_data, c_lin), ('Dolphin Mini', dolphin_data, c_dol)]:
+        ano_ref = data['ano_stats'][2]
+        km_ref = data['km_stats'][2]
+        atual = estima_preco(ano_ref, km_ref, c, 'lin', data)
+
+        dep_10000 = atual - estima_preco(ano_ref, km_ref + 10000, c, 'lin', data)
+        dep_1ano = atual - estima_preco(ano_ref - 1, km_ref, c, 'lin', data)
+
+        print(f"[{nome}] +10000 km: R$ {dep_10000:.2f} ({100*dep_10000/atual:.2f}%) | 1 ano mais velho: R$ {dep_1ano:.2f} ({100*dep_1ano/atual:.2f}%)")
+
+    
