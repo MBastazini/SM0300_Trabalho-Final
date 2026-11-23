@@ -75,13 +75,27 @@ function formatKm(value) {
   return `${numberFormatter.format(value)} km`
 }
 
+// Os dados normalizados ficam centrados em zero: (x - media) / (max - min).
+// Por isso o intervalo nao e [0, 1] e pode ter negativos, ex.: [-0.45, 0.55].
+function normalizedRange(values) {
+  const numericValues = (values ?? []).map(Number).filter(Number.isFinite)
+  if (!numericValues.length) return { min: 0, max: 0 }
+  return { min: Math.min(...numericValues), max: Math.max(...numericValues) }
+}
+
 function histogram(values) {
   const buckets = Array(10).fill(0)
+  const { min, max } = normalizedRange(values)
+  const width = max - min
+
   for (const value of values ?? []) {
     const numericValue = Number(value)
     if (!Number.isFinite(numericValue)) continue
 
-    const bucket = Math.min(9, Math.max(0, Math.floor(numericValue * 10)))
+    // Divide o intervalo real [min, max] em 10 faixas
+    const bucket = width > 0
+      ? Math.min(9, Math.floor(((numericValue - min) / width) * 10))
+      : 0
     buckets[bucket] += 1
   }
 
@@ -90,6 +104,15 @@ function histogram(values) {
     count,
     height: `${Math.max(8, (count / maximum) * 100)}%`,
   }))
+}
+
+const axisFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+function formatAxis(value) {
+  return axisFormatter.format(value)
 }
 
 function formatStat(value) {
@@ -197,9 +220,9 @@ onMounted(fetchCsvFiles)
                 />
               </div>
               <div class="axis-labels">
-                <span>0</span>
+                <span>{{ formatAxis(normalizedRange(normalizedData[parameter]?.values).min) }}</span>
                 <span>Normalizado</span>
-                <span>1</span>
+                <span>{{ formatAxis(normalizedRange(normalizedData[parameter]?.values).max) }}</span>
               </div>
 
               <div v-if="normalizedData[parameter]?.stats?.length" class="statistics">
