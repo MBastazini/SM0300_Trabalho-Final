@@ -3,7 +3,7 @@
 from pathlib import Path
 import numpy as np
 
-from minimos_quadrados import normaliza
+from minimos_quadrados import normaliza, solucao_sistema, REQM, agio_percentual
 
 # The data directory is relative to the repository, not the process location.
 DATA_DIR = Path(__file__).resolve().parent.parent / "dados"
@@ -62,26 +62,32 @@ def get_dolphin_normalizado():
     return normalize_values('dolphin_mini.csv', ['ano', 'preco', 'km'])
 
 if __name__ == "__main__":
-    print("CSV files in the data directory:")
-    for i, csv_file in enumerate(list_csv_files(), start=1):
-        print(f"{i}: {csv_file}")
+    print("Passo 2 -> Normalizando os valores do onix...")
+    onix_data = get_onix_normalizado()
 
+    print("Passo 3 -> Estimando os coeficientes do modelo (linear e quadratico)")
+    [M_lin, b_lin, c_lin] = solucao_sistema(onix_data['ano'], onix_data['km'], onix_data['preco'], 'lin')
+    print(f"Coeficientes do modelo linear: {M_lin}, {b_lin}, {c_lin}")
+    [M_quad, b_quad, c_quad] = solucao_sistema(onix_data['ano'], onix_data['km'], onix_data['preco'], 'quad')
+    print(f"Coeficientes do modelo quadratico: {M_quad}, {b_quad}, {c_quad}")
 
+    print("Determinando os valores estimados...")
 
-    print("\nAno normalizado onix")
-    print(get_onix_normalizado().get('ano', []))
+    ano = onix_data['ano']
+    km = onix_data['km']
 
-    print("\nPreco normalizado onix")
-    print(get_onix_normalizado().get('preco', []))
+    X_lin = np.column_stack((np.ones_like(ano), ano, km))
+    preco_estimado_lin = X_lin @ c_lin
 
-    print("\nKm normalizado onix")
-    print(get_onix_normalizado().get('km', []))
+    X_quad = np.column_stack((np.ones_like(ano), ano, km, ano**2, ano * km, km**2))
+    preco_estimado_quad = X_quad @ c_quad
 
-    print("\nAno normalizado dolphin")
-    print(get_dolphin_normalizado().get('ano', []))
+    print("Passo 4 e 5 -> Determinando o REQM e o agio percentual...")
 
-    print("\nPreco normalizado dolphin")
-    print(get_dolphin_normalizado().get('preco', []))
+    reqm_lin = REQM(onix_data['preco'], preco_estimado_lin)
+    agio_lin = agio_percentual(onix_data['preco'], preco_estimado_lin)
 
-    print("\nKm normalizado dolphin")
-    print(get_dolphin_normalizado().get('km', []))
+    reqm_quad = REQM(onix_data['preco'], preco_estimado_quad)
+    agio_quad = agio_percentual(onix_data['preco'], preco_estimado_quad)
+
+    #TODO: Analisar agil assim como exigido
