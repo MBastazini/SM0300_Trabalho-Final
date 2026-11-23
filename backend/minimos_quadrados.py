@@ -7,26 +7,28 @@ import numpy as np
 #PASSO 2:
 def normaliza(x):
     """
-    Normaliza os dados de entrada para o intervalo [0, 1].
+    Normaliza e adimensionaliza os dados: (x - media) / (max - min).
+    O resultado fica centrado em zero, com amplitude 1 (max - min = 1).
 
     Parâmetros:
     x (array-like): Dados de entrada a serem normalizados.
 
     Retorna:
-    [0] array-like: Dados normalizados no intervalo [0, 1].
+    [0] array-like: Dados normalizados.
     [1] list: Lista contendo o valor mínimo, máximo e a média dos dados originais.
     """
-    x = np.array(x)
-    min_x = np.min(x)
-    max_x = np.max(x)
+    x = np.array(x, dtype=float)
+    # float() converte de np.float64 para float do Python (necessário para o jsonify da API)
+    min_x = float(np.min(x))
+    max_x = float(np.max(x))
+    med_x = float(np.mean(x))
 
     # Evita divisão por zero caso todos os valores sejam iguais
     if max_x - min_x == 0:
         #retorna uma matriz de tamanho x com todos os valores iguais a zero
-        return np.zeros_like(x)
+        return [np.zeros_like(x), [min_x, max_x, med_x]]
 
-    med_x = np.mean(x)
-    return [[(x - med_x) / (max_x - min_x)], [min_x, max_x, med_x]]
+    return [(x - med_x) / (max_x - min_x), [min_x, max_x, med_x]]
 
 
 """
@@ -138,19 +140,20 @@ def REQM(valor_aproximado, valor_real): #Raiz erro quadratico médio
 #PASSO 5
 def agio_percentual(valor_aproximado, valor_real):
     """
-    Calcula o ágio percentual entre os preços aproximados e os preços reais.
+    Calcula o ágio percentual de cada anúncio: h_i = 100 * (p_i - p(a_i, k_i)) / p(a_i, k_i)
 
-    Parâmetros:
-    valor_aproximado (array-like): Preços aproximados obtidos pelo modelo.
-    valor_real (array-like): Preços reais observados.
+    Parâmetros (em reais, não normalizados):
+    valor_aproximado (array-like): Preços aproximados obtidos pelo modelo, p(a_i, k_i).
+    valor_real (array-like): Preços reais observados, p_i.
 
     Retorna:
-    float: Ágio percentual médio.
+    array: Ágio percentual de cada anúncio.
     """
     agio = np.zeros(len(valor_real))
 
     for i in range(len(valor_real)):
-        agio[i] = 100*(valor_real[i] - valor_aproximado[i]) / valor_real[i]
+        # O denominador é o preço estimado pelo modelo, conforme o enunciado
+        agio[i] = 100*(valor_real[i] - valor_aproximado[i]) / valor_aproximado[i]
 
     return agio
 
