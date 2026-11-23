@@ -58,7 +58,7 @@ def get_onix_normalizado():
 
 def get_dolphin_normalizado():
     """
-    Retorna os valores normalizados do arquivo 'dolphin.csv' para os parâmetros 'ano', 'preco' e 'km'.
+    Retorna os valores normalizados do arquivo 'dolphin_mini.csv' para os parâmetros 'ano', 'preco' e 'km'.
     """
     return normalize_values('dolphin_mini.csv', ['ano', 'preco', 'km'])
 
@@ -76,6 +76,15 @@ def normalize_test_values(ano, km, data):
     km_normalized = (km - km_stats[2]) / (km_stats[1] - km_stats[0])
     
     return ano_normalized, km_normalized
+
+def desnormalize_values(valor_normalizado, stats):
+    """
+    Desfaz a normalização: converte um valor normalizado de volta para a escala original.
+    stats é a lista [min, max, media] guardada em data['<parametro>_stats'].
+
+    Inverte X = (x - media) / (max - min)  =>  x = media + X * (max - min)
+    """
+    return stats[2] + valor_normalizado * (stats[1] - stats[0])
 
 if __name__ == "__main__":
     print("Passo 2 -> Normalizando os valores do onix...")
@@ -98,19 +107,26 @@ if __name__ == "__main__":
     X_quad = np.column_stack((np.ones_like(ano), ano, km, ano**2, ano * km, km**2))
     preco_estimado_quad = X_quad @ c_quad
 
+    # Volta os preços (anunciados e estimados) para reais
+    preco_real = desnormalize_values(onix_data['preco'], onix_data['preco_stats'])
+    preco_estimado_lin_reais = desnormalize_values(preco_estimado_lin, onix_data['preco_stats'])
+    preco_estimado_quad_reais = desnormalize_values(preco_estimado_quad, onix_data['preco_stats'])
+
     print("Passo 4 e 5 -> Determinando o REQM e o agio percentual...")
 
-    reqm_lin = mq.REQM(onix_data['preco'], preco_estimado_lin)
-    agio_lin = mq.agio_percentual(onix_data['preco'], preco_estimado_lin)
+    reqm_lin = mq.REQM(preco_estimado_lin_reais, preco_real)
+    agio_lin = mq.agio_percentual(preco_estimado_lin_reais, preco_real)
 
-    reqm_quad = mq.REQM(onix_data['preco'], preco_estimado_quad)
-    agio_quad = mq.agio_percentual(onix_data['preco'], preco_estimado_quad)
+    reqm_quad = mq.REQM(preco_estimado_quad_reais, preco_real)
+    agio_quad = mq.agio_percentual(preco_estimado_quad_reais, preco_real)
+
+    print(f"REQM linear: R$ {reqm_lin:.2f} | REQM quadratico: R$ {reqm_quad:.2f}")
 
     #TODO: Analisar agil assim como exigido
 
 
-    #Usar os modelos para pressupor um preço de um carro com ano 2015 e km 50000
-    ano_test = 2026
+    #Usar os modelos para estimar o preço do carro do Bob: modelo 2022 com 48000 km (passo 6)
+    ano_test = 2022
     km_test = 48000
 
     ano_test_normalized, km_test_normalized = normalize_test_values(ano_test, km_test, onix_data)
@@ -132,5 +148,9 @@ if __name__ == "__main__":
     ])
     preco_estimado_test_quad = X_test_quad @ c_quad
 
-    print(f"Preço estimado para o carro com ano {ano_test} e km {km_test} (modelo linear): {preco_estimado_test_lin}")
-    print(f"Preço estimado para o carro com ano {ano_test} e km {km_test} (modelo quadrático): {preco_estimado_test_quad}")
+    # Volta o preço estimado para reais
+    preco_estimado_test_lin = desnormalize_values(preco_estimado_test_lin, onix_data['preco_stats'])
+    preco_estimado_test_quad = desnormalize_values(preco_estimado_test_quad, onix_data['preco_stats'])
+
+    print(f"Preço estimado para o carro com ano {ano_test} e km {km_test} (modelo linear): R$ {preco_estimado_test_lin:.2f}")
+    print(f"Preço estimado para o carro com ano {ano_test} e km {km_test} (modelo quadrático): R$ {preco_estimado_test_quad:.2f}")
