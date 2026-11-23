@@ -3,8 +3,7 @@
 from pathlib import Path
 import numpy as np
 
-from minimos_quadrados import normaliza, solucao_sistema, REQM, agio_percentual
-
+import minimos_quadrados as mq
 # The data directory is relative to the repository, not the process location.
 DATA_DIR = Path(__file__).resolve().parent.parent / "dados"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -40,7 +39,9 @@ def normalize_values(csv_file, parameter_list):
             #Checa se o parametro que queremos normalizar existe no CSV.
             if parameter in data.dtype.names:
                 #Usa a funcao normalizar programada em outro arquivo.
-                normalized_data[parameter] = normaliza(data[parameter])
+                normalized = mq.normaliza(data[parameter])
+                normalized_data[parameter] = normalized[0]  # Armazena apenas os valores normalizados
+                normalized_data[f"{parameter}_stats"] = normalized[1]  # Armazena os valores min, max e media
             else:
                 print(f"Parameter '{parameter}' not found in {csv_file}.")
     else:
@@ -61,14 +62,29 @@ def get_dolphin_normalizado():
     """
     return normalize_values('dolphin_mini.csv', ['ano', 'preco', 'km'])
 
+def normalize_test_values(ano, km, data):
+    """
+    Normaliza os valores de ano e km fornecidos com base nos valores normalizados do arquivo 'onix.csv'.
+    Retorna os valores normalizados de ano e km.
+    """
+    
+    # Normaliza os valores fornecidos com base nos valores min, max e media do onix
+    ano_stats = data['ano_stats']
+    km_stats = data['km_stats']
+    
+    ano_normalized = (ano - ano_stats[2]) / (ano_stats[1] - ano_stats[0])
+    km_normalized = (km - km_stats[2]) / (km_stats[1] - km_stats[0])
+    
+    return ano_normalized, km_normalized
+
 if __name__ == "__main__":
     print("Passo 2 -> Normalizando os valores do onix...")
     onix_data = get_onix_normalizado()
 
     print("Passo 3 -> Estimando os coeficientes do modelo (linear e quadratico)")
-    [M_lin, b_lin, c_lin] = solucao_sistema(onix_data['ano'], onix_data['km'], onix_data['preco'], 'lin')
+    [M_lin, b_lin, c_lin] = mq.solucao_sistema(onix_data['ano'], onix_data['km'], onix_data['preco'], 'lin')
     print(f"Coeficientes do modelo linear: {M_lin}, {b_lin}, {c_lin}")
-    [M_quad, b_quad, c_quad] = solucao_sistema(onix_data['ano'], onix_data['km'], onix_data['preco'], 'quad')
+    [M_quad, b_quad, c_quad] = mq.solucao_sistema(onix_data['ano'], onix_data['km'], onix_data['preco'], 'quad')
     print(f"Coeficientes do modelo quadratico: {M_quad}, {b_quad}, {c_quad}")
 
     print("Determinando os valores estimados...")
@@ -84,10 +100,37 @@ if __name__ == "__main__":
 
     print("Passo 4 e 5 -> Determinando o REQM e o agio percentual...")
 
-    reqm_lin = REQM(onix_data['preco'], preco_estimado_lin)
-    agio_lin = agio_percentual(onix_data['preco'], preco_estimado_lin)
+    reqm_lin = mq.REQM(onix_data['preco'], preco_estimado_lin)
+    agio_lin = mq.agio_percentual(onix_data['preco'], preco_estimado_lin)
 
-    reqm_quad = REQM(onix_data['preco'], preco_estimado_quad)
-    agio_quad = agio_percentual(onix_data['preco'], preco_estimado_quad)
+    reqm_quad = mq.REQM(onix_data['preco'], preco_estimado_quad)
+    agio_quad = mq.agio_percentual(onix_data['preco'], preco_estimado_quad)
 
     #TODO: Analisar agil assim como exigido
+
+
+    #Usar os modelos para pressupor um preço de um carro com ano 2015 e km 50000
+    ano_test = 2026
+    km_test = 48000
+
+    ano_test_normalized, km_test_normalized = normalize_test_values(ano_test, km_test, onix_data)
+
+    X_test_lin = np.array([
+            1,
+            ano_test_normalized,
+            km_test_normalized,
+        ])
+    preco_estimado_test_lin = X_test_lin @ c_lin
+
+    X_test_quad = np.array([
+        1,
+        ano_test_normalized,
+        km_test_normalized,
+        ano_test_normalized**2,
+        ano_test_normalized * km_test_normalized,
+        km_test_normalized**2,
+    ])
+    preco_estimado_test_quad = X_test_quad @ c_quad
+
+    print(f"Preço estimado para o carro com ano {ano_test} e km {km_test} (modelo linear): {preco_estimado_test_lin}")
+    print(f"Preço estimado para o carro com ano {ano_test} e km {km_test} (modelo quadrático): {preco_estimado_test_quad}")

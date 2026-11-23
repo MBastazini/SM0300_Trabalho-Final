@@ -13,7 +13,8 @@ def normaliza(x):
     x (array-like): Dados de entrada a serem normalizados.
 
     Retorna:
-    array-like: Dados normalizados no intervalo [0, 1].
+    [0] array-like: Dados normalizados no intervalo [0, 1].
+    [1] list: Lista contendo o valor mínimo, máximo e a média dos dados originais.
     """
     x = np.array(x)
     min_x = np.min(x)
@@ -25,7 +26,7 @@ def normaliza(x):
         return np.zeros_like(x)
 
     med_x = np.mean(x)
-    return (x - med_x) / (max_x - min_x)
+    return [[(x - med_x) / (max_x - min_x)], [min_x, max_x, med_x]]
 
 
 """
@@ -152,3 +153,4 @@ def agio_percentual(valor_aproximado, valor_real):
         agio[i] = 100*(valor_real[i] - valor_aproximado[i]) / valor_real[i]
 
     return agio
+

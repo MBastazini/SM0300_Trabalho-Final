@@ -1,0 +1,130 @@
+ # ==========================================
+  # 5. ANÁLISE DE ÁGIO PERCENTUAL (h_i) E CLASSIFICAÇÃO
+  #
+  #   Desnormalização da predição do modelo:
+  #   P_hat = (p_est - p_mean) / (p_max - p_min)
+  #   => p(a_i, k_i) = p_mean + P_hat * (p_max - p_min)
+  #
+  #   Ágio percentual:
+  #   h_i = 100 * (p_i - p(a_i, k_i)) / p(a_i, k_i)
+  # ==========================================
+
+  # Assumindo que p_raw, p_mean, p_max, p_min vêm do Passo 2,
+  # e X_lin, c_lin (ou X_quad, c_quad) vêm do Passo 3.
+  # Escolha o modelo de melhor ajuste (ex: quadrático ou linear):
+  P_hat = X_quad @ c_quad  # ou X_lin @ c_lin, conforme sua escolha no Passo 3
+
+  # Desnormalizando para a escala original (R$)
+  p_estimado = p_mean + P_hat * (p_max - p_min)
+
+  # Cálculo do ágio percentual h_i
+  h = 100.0 * (p_raw - p_estimado) / p_estimado
+
+  # Classificação dos anúncios
+  justos = h[np.abs(h) < 10.0]
+  acima = h[h >= 10.0]
+  oportunidades = h[h <= -10.0]
+
+  # Melhor barganha: anúncio com o menor valor de h_i (maior desconto relativo)
+  idx_barganha = int(np.argmin(h))
+
+  print("=== RESULTADOS DA ANÁLISE DE ÁGIO ===")
+  print(f"Total de anúncios analisados: {len(h)}")
+  print(f"Preço justo (|h_i| < 10%):           {len(justos)} anúncios")
+  print(f"Muito acima do estimado (h_i >= 10%): {len(acima)} anúncios")
+  print(f"Boas oportunidades (h_i <= -10%):     {len(oportunidades)} anúncios")
+  print("-" * 40)
+  print(f"Melhor barganha: Anúncio #{idx_barganha + 1}")
+  print(f"  -> Ano: {int(a_raw[idx_barganha])} | Km: {k_raw[idx_barganha]:,.0f} km")
+  print(f"  -> Preço anunciado: R$ {p_raw[idx_barganha]:,.2f}")
+  print(f"  -> Preço estimado:  R$ {p_estimado[idx_barganha]:,.2f}")
+  print(f"  -> Ágio (h_i):      {h[idx_barganha]:.2f}%")
+
+  # ==========================================
+  # GRÁFICO DO ÁGIO POR ANÚNCIO
+  # ==========================================
+  indices = np.arange(1, len(h) + 1)
+
+  # Cores por categoria: Verde (oportunidade), Azul (justo), Vermelho (caro)
+  cores = [
+      "#2ecc71" if val <= -10 else ("#e74c3c" if val >= 10 else "#3498db")
+      for val in h
+  ]
+
+  plt.figure(figsize=(12, 5))
+  bars = plt.bar(indices, h, color=cores, edgecolor="black", alpha=0.85)
+
+  # Linhas de corte de +-10% e linha zero
+  plt.axhline(0, color="black", linewidth=1)
+  plt.axhline(
+      10,
+      color="#e74c3c",
+      linestyle="--",
+      linewidth=1.2,
+      label="Limite superior (+10%)",
+  )
+  plt.axhline(
+      -10,
+      color="#2ecc71",
+      linestyle="--",
+      linewidth=1.2,
+      label="Limite oportunidade (-10%)",
+  )
+
+  # Destaque visual na melhor barganha
+  plt.annotate(
+      f"Melhor barganha\n(#{idx_barganha + 1}: {h[idx_barganha]:.1f}%)",
+      xy=(idx_barganha + 1, h[idx_barganha]),
+      xytext=(idx_barganha + 1, h[idx_barganha] - 6),
+      ha="center",
+      fontweight="bold",
+      color="#1e8449",
+      arrowprops=dict(arrowstyle="->", color="#1e8449", lw=1.5),
+  )
+
+  plt.title("Ágio Percentual ($h_i$) por Anúncio Coletado")
+  plt.xlabel("Índice do Anúncio ($i$)")
+  plt.ylabel("Ágio Percentual $h_i$ (%)")
+  plt.xticks(indices)
+  plt.grid(axis="y", linestyle=":", alpha=0.6)
+  plt.legend()
+  plt.tight_layout()
+  plt.show()
+
+    # Subplot 1: Ajuste Linear
+    ax1 = fig.add_subplot(121, projection="3d")
+    ax1.scatter(A, K, P, color="red", s=40, label="Dados Coletados")
+    ax1.plot_surface(AA, KK, PP_lin, alpha=0.5, cmap="viridis")
+    ax1.set_title("Ajuste Linear (Plano)")
+    ax1.set_xlabel("Ano Normalizado (A)")
+    ax1.set_ylabel("Quilometragem Normalizada (K)")
+    ax1.set_zlabel("Preço Normalizado (P)")
+    ax1.legend()
+
+    # Subplot 2: Ajuste Quadrático
+    ax2 = fig.add_subplot(122, projection="3d")
+    ax2.scatter(A, K, P, color="red", s=40, label="Dados Coletados")
+    ax2.plot_surface(AA, KK, PP_quad, alpha=0.5, cmap="plasma")
+    ax2.set_title("Ajuste Quadrático (Superfície 2º Grau)")
+    ax2.set_xlabel("Ano Normalizado (A)")
+    ax2.set_ylabel("Quilometragem Normalizada (K)")
+    ax2.set_zlabel("Preço Normalizado (P)")
+    ax2.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+    return
+
+
+
+
+    # PASSO 6
+def preco_estimado(c, a0, k0, a, k, p, modelo="linear"):
+    A = normaliza(a, a0)
+    K = normaliza(k, k0)
+    if modelo == "linear":
+        P = c[0] + c[1]*A + c[2]*K
+    else:
+        P = c[0] + c[1]*A + c[2]*K + c[3]*A**2 + c[4]*A*K + c[5]*K**2
+    return desnormaliza(p, P)
