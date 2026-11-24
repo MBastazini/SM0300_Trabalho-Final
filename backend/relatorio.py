@@ -19,12 +19,47 @@ from pathlib import Path
 
 import numpy as np
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 import minimos_quadrados as mq
 from preco_de_mercado import desnormalize_values, estima_preco
 
 RAIZ = Path(__file__).resolve().parent.parent
 PASTA_GRAFICOS = RAIZ / "graficos"
 MODELOS = [('lin', 'linear'), ('quad', 'quadrático')]
+
+
+def moeda(valor):
+    """Formata valores monetários de maneira uniforme no relatório."""
+    return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+def inteiro(valor):
+    """Formata valores inteiros com separador de milhares."""
+    return f"{valor:,.0f}".replace(',', '.')
+
+
+def ano_formatado(valor):
+    """Formata anos sem separador de milhares."""
+    return f"{valor:.0f}"
+
+
+def percentual(valor):
+    """Formata porcentagens com duas casas decimais."""
+    return f"{valor:.2f}".replace('.', ',') + '%'
+
+
+def vetor_matriz(matriz):
+    """Devolve uma matriz ou vetor com números alinhados e legíveis."""
+    matriz = np.asarray(matriz)
+    if matriz.ndim == 1:
+        return '[' + '  '.join(f'{valor:10.4f}' for valor in matriz) + ']'
+
+    linhas = []
+    for linha in matriz:
+        linhas.append('[ ' + '  '.join(f'{valor:10.4f}' for valor in linha) + ' ]')
+    return '\n'.join(linhas)
 
 
 def carrega_csv(caminho):
@@ -75,35 +110,52 @@ def relatorio(dados, nome='carro', ano_carro=None, km_carro=None, pasta=PASTA_GR
     prefixo = nome.lower().replace(' ', '_')
     np.set_printoptions(precision=4, suppress=True)
 
-    print("=" * 70)
-    print(f"RELATÓRIO: {nome} ({len(dados)} anúncios)")
-    print("=" * 70)
+    largura = 72
+    print("\n" + "=" * largura)
+    print(f"{'RELATÓRIO':^72}")
+    print(f"{nome} - {len(dados)} anúncios")
+    print("=" * largura)
 
     # PASSO 2: normalização
     data = normaliza_matriz(dados)
     preco_real = dados[:, 2]
-    print("\n[Passo 2] Normalização: (x - média) / (máx - mín)")
+    print("\n" + "-" * largura)
+    print("PASSO 2 - NORMALIZAÇÃO")
+    print("Fórmula: (x - média) / (máximo - mínimo)")
+    print("-" * largura)
     for coluna in ['ano', 'km', 'preco']:
         mn, mx, md = data[f'{coluna}_stats']
-        sep = '' if coluna == 'ano' else ',' 
-        print(f"  {coluna:>5}: mín = {mn:{sep}.0f} | máx = {mx:{sep}.0f} | média = {md:{sep}.2f}")
+        if coluna == 'ano':
+            minimo, maximo, media = ano_formatado(mn), ano_formatado(mx), ano_formatado(md)
+        elif coluna == 'km':
+            minimo, maximo = inteiro(mn), inteiro(mx)
+            media = inteiro(md)
+        else:
+            minimo, maximo, media = moeda(mn), moeda(mx), moeda(md)
+        print(f"  {coluna.upper():<8}  mín: {minimo:>14}  |  máx: {maximo:>14}  |  média: {media:>14}")
 
     if ano_carro is None or km_carro is None:
         ano_carro, km_carro = data['ano_stats'][2], data['km_stats'][2]
-        descricao_carro = f"carro médio da amostra ({ano_carro:.1f}, {km_carro:,.0f} km)"
+        descricao_carro = f"carro médio da amostra ({ano_formatado(ano_carro)}, {inteiro(km_carro)} km)"
     else:
-        descricao_carro = f"ano-modelo {ano_carro} com {km_carro:,} km"
+        descricao_carro = f"ano-modelo {ano_formatado(ano_carro)} com {inteiro(km_carro)} km"
 
     resultados = {}
     for tipo, nome_modelo in MODELOS:
-        print(f"\n---------------- Modelo {nome_modelo} ----------------")
+        print("\n" + "-" * largura)
+        print(f"{'MODELO ' + nome_modelo.upper():^72}")
+        print("-" * largura)
 
         # PASSO 3: sistema linear (equações normais) e solução
         M, b, c = mq.solucao_sistema(data['ano'], data['km'], data['preco'], tipo)
-        print("[Passo 3] Sistema (XᵀX) c = Xᵀy")
-        print(f"  M = XᵀX =\n{M}")
-        print(f"  b = Xᵀy = {b}")
-        print(f"  c = {c}")
+        print("\nPASSO 3 - SISTEMA DE EQUAÇÕES NORMAIS")
+        print("  (X^T X) c = X^T y")
+        print("  M = X^T X")
+        print(vetor_matriz(M))
+        print("\n  b = X^T y")
+        print(f"  {vetor_matriz(b)}")
+        print(f"\n  Coeficientes c")
+        print(f"  {vetor_matriz(c)}")
         mq.plotar_modelo_3d(data['ano'], data['km'], data['preco'], c, tipo, titulo=nome,
                             arquivo=pasta / f"{prefixo}_superficie_{tipo}.png")
 
@@ -113,33 +165,44 @@ def relatorio(dados, nome='carro', ano_carro=None, km_carro=None, pasta=PASTA_GR
 
         # PASSO 4: REQM
         reqm = mq.REQM(estimado, preco_real)
-        print(f"[Passo 4] REQM = R$ {reqm:,.2f} ({100 * reqm / data['preco_stats'][2]:.1f}% do preço médio)")
+        print("\nPASSO 4 - RAIZ DO ERRO QUADRÁTICO MÉDIO")
+        print(f"  REQM = {moeda(reqm)}")
+        print(f"  Representa {percentual(100 * reqm / data['preco_stats'][2])} do preço médio")
 
         # PASSO 5: ágio, classificação e melhor barganha
         agio = mq.agio_percentual(estimado, preco_real)
         i = int(np.argmin(agio))
-        print("[Passo 5] Ágio")
-        print(f"  Preço justo (|h| < 10%):        {np.sum(np.abs(agio) < 10)}")
-        print(f"  Muito acima (h >= 10%):         {np.sum(agio >= 10)}")
-        print(f"  Boas oportunidades (h <= -10%): {np.sum(agio <= -10)}")
-        print(f"  Melhor barganha: anúncio #{i + 1} ({dados[i, 0]:.0f}, {dados[i, 1]:,.0f} km) - "
-              f"anunciado R$ {preco_real[i]:,.2f}, estimado R$ {estimado[i]:,.2f}, ágio {agio[i]:.2f}%")
+        print("\nPASSO 5 - CLASSIFICAÇÃO PELO ÁGIO")
+        print(f"  {'Preço justo (|ágio| < 10%):':<34}{np.sum(np.abs(agio) < 10):>4}")
+        print(f"  {'Muito acima (ágio >= 10%):':<34}{np.sum(agio >= 10):>4}")
+        print(f"  {'Boas oportunidades (ágio <= -10%):':<34}{np.sum(agio <= -10):>4}")
+        print("\n  Melhor barganha")
+        print(f"    Anúncio: #{i + 1}")
+        print(f"    Veículo: ano {ano_formatado(dados[i, 0])} / {inteiro(dados[i, 1])} km")
+        print(f"    Anunciado: {moeda(preco_real[i])}")
+        print(f"    Estimado:  {moeda(estimado[i])}")
+        print(f"    Ágio:      {percentual(agio[i])}")
         mq.plotar_agio(agio, f'{nome} - modelo {nome_modelo}',
                        arquivo=pasta / f"{prefixo}_agio_{tipo}.png")
 
         # PASSOS 6 e 7: preço do carro escolhido e depreciação
         atual, quedas = depreciacao(ano_carro, km_carro, c, tipo, data)
-        print(f"[Passo 6] Preço estimado do {descricao_carro}: R$ {atual:,.2f}")
-        print("[Passo 7] Depreciação:")
+        print("\nPASSO 6 - ESTIMATIVA DO VEÍCULO")
+        print(f"  {descricao_carro}")
+        print(f"  Preço estimado: {moeda(atual)}")
+        print("\nPASSO 7 - DEPRECIAÇÃO")
         for evento, (queda, pct) in quedas.items():
-            print(f"  {evento:<17} R$ {queda:,.2f} ({pct:.2f}%)")
+            print(f"  {evento:<17} queda de {moeda(queda):>16}  ({percentual(pct)})")
 
         resultados[tipo] = {'c': c, 'M': M, 'b': b, 'reqm': reqm, 'agio': agio,
                             'estimado': estimado, 'preco_atual': atual, 'depreciacao': quedas}
 
     melhor = min(resultados, key=lambda t: resultados[t]['reqm'])
-    print(f"\n[Passo 4] Menor REQM: modelo {dict(MODELOS)[melhor]}")
-    print(f"Gráficos salvos em: {pasta}")
+    print("\n" + "=" * largura)
+    print("RESUMO")
+    print(f"  Menor REQM: modelo {dict(MODELOS)[melhor]}")
+    print(f"  Gráficos salvos em: {pasta}")
+    print("=" * largura)
 
     resultados['data'] = data
     return resultados
@@ -152,16 +215,20 @@ def compara_depreciacao(carros):
 
     carros -> lista de (nome, resultados) com os retornos de relatorio().
     """
-    print("\n" + "=" * 70)
-    print("[Passo 9] Comparação da depreciação (modelo linear, carro médio de cada amostra)")
-    print("=" * 70)
+    largura = 72
+    print("\n" + "=" * largura)
+    print(f"{'PASSO 9 - COMPARAÇÃO DA DEPRECIAÇÃO':^72}")
+    print("Modelo linear - carro médio de cada amostra")
+    print("=" * largura)
     for nome, res in carros:
         data, c = res['data'], res['lin']['c']
         _, quedas = depreciacao(data['ano_stats'][2], data['km_stats'][2], c, 'lin', data)
         km_queda, km_pct = quedas['+10000 km']
         ano_queda, ano_pct = quedas['1 ano mais velho']
-        print(f"  {nome:<14} c = {np.round(c, 4)} | +10000 km: R$ {km_queda:,.2f} ({km_pct:.2f}%) | "
-              f"1 ano: R$ {ano_queda:,.2f} ({ano_pct:.2f}%)")
+        print(f"\n  {nome}")
+        print(f"    Coeficientes c: {vetor_matriz(c)}")
+        print(f"    Mais 10.000 km: queda de {moeda(km_queda)} ({percentual(km_pct)})")
+        print(f"    1 ano mais velho: queda de {moeda(ano_queda)} ({percentual(ano_pct)})")
 
 
 if __name__ == "__main__":
@@ -173,6 +240,6 @@ if __name__ == "__main__":
         relatorio(carrega_csv(caminho), caminho.stem, ano, km)
     else:
         # Projeto completo: Onix (carro do Bob) e Dolphin Mini (veículo elétrico)
-        onix = relatorio(carrega_csv(RAIZ / "dados" / "onix.csv"), 'Onix', ano_carro=2022, km_carro=48000)
-        dolphin = relatorio(carrega_csv(RAIZ / "dados" / "dolphin_mini.csv"), 'Dolphin Mini')
+        onix = relatorio(carrega_csv(RAIZ / "dados" / "onix_bruto.csv"), 'Onix', ano_carro=2022, km_carro=48000)
+        dolphin = relatorio(carrega_csv(RAIZ / "dados" / "dolphin_mini_bruto.csv"), 'Dolphin Mini')
         compara_depreciacao([('Onix', onix), ('Dolphin Mini', dolphin)])
