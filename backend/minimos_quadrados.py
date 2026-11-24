@@ -90,16 +90,18 @@ def solucao_sistema(A, K, P, tipo_solucao):
 
     return [M, b, c]
 
-def plotar_modelo_3d(A, K, P, c, tipo_solucao):
+def plotar_modelo_3d(A, K, P, c, tipo_solucao, titulo='', arquivo=None):
     """
     Gera um gráfico 3D comparando os dados reais com a superfície ajustada (linear ou quadrática).
-    
+
     Parâmetros:
         A -> Array com Ano normalizado
         K -> Array com Quilometragem normalizada
         P -> Array com Preço normalizado
         c -> Vetor de coeficientes retornado por solucao_sistema
         tipo_solucao -> 'lin' ou 'quad'
+        titulo -> (opcional) texto extra no título, ex.: nome do carro
+        arquivo -> (opcional) caminho para salvar a imagem; se omitido, abre a janela do gráfico
     """
     # 1. Criar uma malha (grid) regular de pontos entre os valores mínimos e máximos de A e K
     a_grid = np.linspace(np.min(A), np.max(A), 30)
@@ -110,12 +112,12 @@ def plotar_modelo_3d(A, K, P, c, tipo_solucao):
     if tipo_solucao == 'lin':
         # p̂(A,K) = c0 + c1*A + c2*K
         P_mesh = c[0] + c[1]*A_mesh + c[2]*K_mesh
-        titulo = 'Ajuste Linear (Plano)'
+        titulo_modelo = 'Ajuste Linear (Plano)'
     elif tipo_solucao == 'quad':
         # p̂(A,K) = c0 + c1*A + c2*K + c3*A^2 + c4*A*K + c5*K^2
         P_mesh = (c[0] + c[1]*A_mesh + c[2]*K_mesh + 
                   c[3]*(A_mesh**2) + c[4]*(A_mesh * K_mesh) + c[5]*(K_mesh**2))
-        titulo = 'Ajuste Quadrático (Superfície Curva)'
+        titulo_modelo = 'Ajuste Quadrático (Superfície Curva)'
     else:
         raise ValueError("tipo_solucao deve ser 'lin' ou 'quad'")
 
@@ -133,7 +135,7 @@ def plotar_modelo_3d(A, K, P, c, tipo_solucao):
     ax.set_xlabel('Ano Normalizado (A)', labelpad=10)
     ax.set_ylabel('Quilometragem Normalizada (K)', labelpad=10)
     ax.set_zlabel('Preço Normalizado (P)', labelpad=10)
-    ax.set_title(f'Regressão por Mínimos Quadrados - {titulo}', fontsize=13, pad=15)
+    ax.set_title(f'Regressão por Mínimos Quadrados - {titulo_modelo}', fontsize=13, pad=15)
     
     # Adiciona legenda e barra de escala do preço previsto
     ax.legend(loc='upper left')
@@ -142,8 +144,11 @@ def plotar_modelo_3d(A, K, P, c, tipo_solucao):
     # Ajusta o ângulo de visão inicial (elevação, azimute)
     ax.view_init(elev=25, azim=-135)
 
+    if titulo:
+        ax.set_title(f'{titulo} - {titulo_modelo}', fontsize=13, pad=15)
+
     plt.tight_layout()
-    plt.show()
+    mostrar_ou_salvar(fig, arquivo)
     return
 
 #PASSO 4
@@ -179,7 +184,7 @@ def agio_percentual(valor_aproximado, valor_real):
     return agio
 
 
-def plotar_agio(agio, titulo=''):
+def plotar_agio(agio, titulo='', arquivo=None):
     """
     Gera um gráfico de barras com o ágio percentual de cada anúncio.
 
@@ -188,8 +193,9 @@ def plotar_agio(agio, titulo=''):
     A melhor barganha (menor ágio) é destacada com uma seta.
 
     Parâmetros:
-        agio   -> Array com o ágio percentual de cada anúncio (saída de agio_percentual)
-        titulo -> Texto extra para o título (ex.: 'Onix - modelo lin')
+        agio    -> Array com o ágio percentual de cada anúncio (saída de agio_percentual)
+        titulo  -> Texto extra para o título (ex.: 'Onix - modelo lin')
+        arquivo -> (opcional) caminho para salvar a imagem; se omitido, abre a janela do gráfico
     """
     agio = np.asarray(agio)
     indices = np.arange(1, len(agio) + 1)
@@ -218,6 +224,15 @@ def plotar_agio(agio, titulo=''):
     ax.legend()
 
     plt.tight_layout()
-    plt.show()
+    mostrar_ou_salvar(fig, arquivo)
     return
+
+
+def mostrar_ou_salvar(fig, arquivo=None):
+    """Salva a figura em `arquivo` (PNG) ou, se não houver arquivo, abre a janela do gráfico."""
+    if arquivo:
+        fig.savefig(arquivo, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+    else:
+        plt.show()
 
