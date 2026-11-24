@@ -20,6 +20,8 @@ const estimateKm = ref('')
 const estimateResult = ref(null)
 const estimateComparisons = ref([])
 const isEstimating = ref(false)
+const csvFileInput = ref(null)
+const isUploadingCsv = ref(false)
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -44,6 +46,44 @@ async function fetchCsvFiles() {
     console.error(error)
   } finally {
     isLoadingFiles.value = false
+  }
+}
+
+function openCsvPicker() {
+  csvFileInput.value?.click()
+}
+
+async function uploadCsv(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+
+  isUploadingCsv.value = true
+  errorMessage.value = ''
+
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await fetch('/api/dados/upload', {
+      method: 'POST',
+      body: formData,
+    })
+    const data = await response.json()
+
+    if (!response.ok) {
+      const missing = data.missing?.length
+        ? ` Colunas ausentes: ${data.missing.join(', ')}.`
+        : ''
+      throw new Error((data.error || 'Nao foi possivel adicionar o CSV.') + missing)
+    }
+
+    await fetchCsvFiles()
+    selectedCsv.value = data.csv_file
+  } catch (error) {
+    errorMessage.value = error.message || 'Nao foi possivel adicionar o CSV.'
+  } finally {
+    isUploadingCsv.value = false
   }
 }
 
@@ -496,9 +536,21 @@ onMounted(fetchCsvFiles)
             </select>
           </label>
 
-          <button type="button" class="add-button" disabled>
+          <input
+            ref="csvFileInput"
+            class="csv-file-input"
+            type="file"
+            accept=".csv,text/csv"
+            @change="uploadCsv"
+          >
+          <button
+            type="button"
+            class="add-button"
+            :disabled="isUploadingCsv"
+            @click="openCsvPicker"
+          >
             <span aria-hidden="true">+</span>
-            Adicionar novo
+            {{ isUploadingCsv ? 'Adicionando...' : 'Adicionar novo' }}
           </button>
 
           <button

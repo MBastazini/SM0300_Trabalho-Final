@@ -1,9 +1,11 @@
 import unittest
+from io import BytesIO
+from pathlib import Path
 
 
 #ARQUIVO CRIADO PELO COPILOT
 #PODEMOS NAO USA-LO
-from app import app, calculation_cache, list_csv_files
+from app import app, calculation_cache, DATA_DIR, list_csv_files
 
 
 class BackendTest(unittest.TestCase):
@@ -39,6 +41,37 @@ class BackendTest(unittest.TestCase):
         self.assertEqual(models_response.status_code, 200)
         self.assertIs(first_normalized, second_normalized)
         self.assertIs(first_models, second_models)
+
+    def test_csv_upload_requires_expected_columns(self):
+        upload = (BytesIO(b"ano,km\n2024,1000\n"),
+                  "missing.csv")
+        response = self.client.post(
+            "/api/dados/upload",
+            data={"file": upload},
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("preco", response.get_json()["missing"])
+
+    def test_valid_csv_is_added_and_listed(self):
+        csv_name = "teste_upload.csv"
+        file_path = DATA_DIR / csv_name
+        upload = (BytesIO(b"ano,km,preco\n2024,1000,90000\n2025,500,95000\n"),
+                  csv_name)
+
+        try:
+            response = self.client.post(
+                "/api/dados/upload",
+                data={"file": upload},
+                content_type="multipart/form-data",
+            )
+
+            self.assertEqual(response.status_code, 201)
+            self.assertIn(csv_name, list_csv_files())
+        finally:
+            if file_path.is_file():
+                file_path.unlink()
 
 
 if __name__ == "__main__":

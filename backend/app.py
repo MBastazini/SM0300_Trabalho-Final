@@ -4,6 +4,7 @@ from threading import RLock
 import numpy as np
 
 from flask import Flask, jsonify, request
+from werkzeug.utils import secure_filename
 
 import minimos_quadrados as mq
 
@@ -189,6 +190,74 @@ def dados_dolphin():
 @app.get("/api/dados")
 def dados_csv():
     return jsonify({"csv_files": list_csv_files()})
+
+
+@app.post("/api/dados/upload")
+def upload_csv():
+    uploaded_file = request.files.get("file")
+
+    if uploaded_file is None or uploaded_file.filename == "":
+        return jsonify({"error": "Selecione um arquivo CSV."}), 400
+
+    filename = secure_filename(uploaded_file.filename)
+    if not filename or not filename.lower().endswith(".csv"):
+        return jsonify({"error": "O arquivo deve ter extensao .csv."}), 400
+
+    try:
+        uploaded_file.stream.seek(0)
+        text = uploaded_file.stream.read().decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return jsonify({"error": "O CSV deve estar codificado em UTF-8."}), 400
+
+    import io
+    reader = csv.DictReader(io.StringIO(text))
+    required_columns = {"ano", "km", "preco"}
+    headers = {
+        (header or "").strip().lower()
+        for header in (reader.fieldnames or [])
+    }
+
+    if not required_columns.issubset(headers):
+        missing = sorted(required_columns - headers)
+        return jsonify({
+            "error": "Colunas obrigatorias ausentes.",
+            "missing": missing,
+        }), 400
+
+    valid_rows = 0
+    for row in reader:
+        try:
+            normalized_row = {
+                str(key).strip().lower(): value
+                for key, value in row.items()
+                if key is not None
+            }
+            year = float(normalized_row["ano"])
+            km = float(normalized_row["km"])
+            price = float(normalized_row["preco"])
+        except (KeyError, TypeError, ValueError):
+            return jsonify({
+                "error": "Todas as linhas devem conter ano, km e preco numericos."
+            }), 400
+
+        if year < 1886 or km < 0 or price <= 0:
+            return jsonify({
+                "error": "Ano deve ser valido, quilometragem nao negativa e preco positivo."
+            }), 400
+        valid_rows += 1
+
+    if valid_rows == 0:
+        return jsonify({"error": "O CSV nao possui linhas de dados."}), 400
+
+    file_path = DATA_DIR / filename
+    file_path.write_text(text, encoding="utf-8")
+    calculation_cache.clear()
+
+    return jsonify({
+        "message": "CSV adicionado com sucesso.",
+        "csv_file": filename,
+        "row_count": valid_rows,
+    }), 201
 
 
 @app.get("/api/dados/<path:csv_name>")
