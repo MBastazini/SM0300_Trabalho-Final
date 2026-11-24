@@ -2,8 +2,6 @@ import preco_de_mercado
 import minimos_quadrados as mq
 import numpy as np
 
-
-
 print("Passo 2 -> Normalizando os valores do onix...")
 onix_data = preco_de_mercado.get_onix_normalizado()
 
@@ -77,26 +75,27 @@ for tipo, c in [('lin', c_lin), ('quad', c_quad)]:
     dep_1ano = atual - preco_de_mercado.estima_preco(2021, 48000, c, tipo, onix_data)
     print(f"[{tipo}] +8000 km: R$ {dep_8000:.2f} ({100*dep_8000/atual:.2f}%)")
     print(f"[{tipo}] +10000 km: R$ {dep_10000:.2f} ({100*dep_10000/atual:.2f}%) | 1 ano mais velho: R$ {dep_1ano:.2f} ({100*dep_1ano/atual:.2f}%)")
-    print("Passo 9 -> Veículo elétrico (Dolphin Mini)")
-    dolphin_data = preco_de_mercado.get_dolphin_normalizado()
-    [M_dol, b_dol, c_dol] = mq.solucao_sistema(dolphin_data['ano'], dolphin_data['km'], dolphin_data['preco'], 'lin')
-    print(f"Coeficientes do Dolphin (linear): {c_dol}")
 
-    X_dol = np.column_stack((np.ones_like(dolphin_data['ano']), dolphin_data['ano'], dolphin_data['km']))
-    preco_real_dol = preco_de_mercado.desnormalize_values(dolphin_data['preco'], dolphin_data['preco_stats'])
-    preco_estimado_dol = preco_de_mercado.desnormalize_values(X_dol @ c_dol, dolphin_data['preco_stats'])
+print("Passo 9 -> Veículo elétrico (Dolphin Mini)")
+dolphin_data = preco_de_mercado.get_dolphin_normalizado()
+[M_dol, b_dol, c_dol] = mq.solucao_sistema(dolphin_data['ano'], dolphin_data['km'], dolphin_data['preco'], 'lin')
+print(f"Coeficientes do Dolphin (linear): {c_dol}")
 
-    reqm_dol = mq.REQM(preco_estimado_dol, preco_real_dol)
-    agio_dol = mq.agio_percentual(preco_estimado_dol, preco_real_dol)
-    print(f"REQM Dolphin: R$ {reqm_dol:.2f}")
+X_dol = np.column_stack((np.ones_like(dolphin_data['ano']), dolphin_data['ano'], dolphin_data['km']))
+preco_real_dol = preco_de_mercado.desnormalize_values(dolphin_data['preco'], dolphin_data['preco_stats'])
+preco_estimado_dol = preco_de_mercado.desnormalize_values(X_dol @ c_dol, dolphin_data['preco_stats'])
 
-    # Depreciação no carro médio de cada amostra (os dois carros não têm anos em comum)
-    for nome, data, c in [('Onix', onix_data, c_lin), ('Dolphin Mini', dolphin_data, c_dol)]:
-        ano_ref = data['ano_stats'][2]
-        km_ref = data['km_stats'][2]
-        atual = preco_de_mercado.estima_preco(ano_ref, km_ref, c, 'lin', data)
+reqm_dol = mq.REQM(preco_estimado_dol, preco_real_dol)
+agio_dol = mq.agio_percentual(preco_estimado_dol, preco_real_dol)
+print(f"REQM Dolphin: R$ {reqm_dol:.2f}")
 
-        dep_10000 = atual - preco_de_mercado.estima_preco(ano_ref, km_ref + 10000, c, 'lin', data)
-        dep_1ano = atual - preco_de_mercado.estima_preco(ano_ref - 1, km_ref, c, 'lin', data)
+# Depreciação no carro médio de cada amostra (os dois carros não têm anos em comum)
+for nome, data, c in [('Onix', onix_data, c_lin), ('Dolphin Mini', dolphin_data, c_dol)]:
+    ano_ref = data['ano_stats'][2]
+    km_ref = data['km_stats'][2]
+    atual = preco_de_mercado.estima_preco(ano_ref, km_ref, c, 'lin', data)
 
-        print(f"[{nome}] +10000 km: R$ {dep_10000:.2f} ({100*dep_10000/atual:.2f}%) | 1 ano mais velho: R$ {dep_1ano:.2f} ({100*dep_1ano/atual:.2f}%)")
+    dep_10000 = atual - preco_de_mercado.estima_preco(ano_ref, km_ref + 10000, c, 'lin', data)
+    dep_1ano = atual - preco_de_mercado.estima_preco(ano_ref - 1, km_ref, c, 'lin', data)
+
+    print(f"[{nome}] +10000 km: R$ {dep_10000:.2f} ({100*dep_10000/atual:.2f}%) | 1 ano mais velho: R$ {dep_1ano:.2f} ({100*dep_1ano/atual:.2f}%)")
