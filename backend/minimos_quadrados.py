@@ -178,3 +178,46 @@ def agio_percentual(valor_aproximado, valor_real):
 
     return agio
 
+
+def plotar_agio(agio, titulo=''):
+    """
+    Gera um gráfico de barras com o ágio percentual de cada anúncio.
+
+    Cores: verde = boa oportunidade (h <= -10%), azul = preço justo (|h| < 10%),
+           vermelho = muito acima (h >= 10%).
+    A melhor barganha (menor ágio) é destacada com uma seta.
+
+    Parâmetros:
+        agio   -> Array com o ágio percentual de cada anúncio (saída de agio_percentual)
+        titulo -> Texto extra para o título (ex.: 'Onix - modelo lin')
+    """
+    agio = np.asarray(agio)
+    indices = np.arange(1, len(agio) + 1)
+    cores = ['#2ecc71' if h <= -10 else '#e74c3c' if h >= 10 else '#3498db' for h in agio]
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ax.bar(indices, agio, color=cores, edgecolor='black', linewidth=0.4)
+
+    # Linha zero e limites de +-10%
+    ax.axhline(0, color='black', linewidth=1)
+    ax.axhline(10, color='#e74c3c', linestyle='--', linewidth=1.2, label='+10% (muito acima)')
+    ax.axhline(-10, color='#2ecc71', linestyle='--', linewidth=1.2, label='-10% (boa oportunidade)')
+
+    # Destaque na melhor barganha
+    i = int(np.argmin(agio))
+    ax.annotate(f'Melhor barganha\n#{i + 1}: {agio[i]:.1f}%',
+                xy=(i + 1, agio[i]), xytext=(i + 1, agio[i] - 9),
+                ha='center', fontweight='bold', color='#1e8449',
+                arrowprops=dict(arrowstyle='->', color='#1e8449', lw=1.5))
+    ax.set_ylim(np.min(agio) - 15, np.max(agio) + 5)
+
+    ax.set_title(f'Ágio percentual por anúncio - {titulo}')
+    ax.set_xlabel('Índice do anúncio (i)')
+    ax.set_ylabel('Ágio $h_i$ (%)')
+    ax.grid(axis='y', linestyle=':', alpha=0.6)
+    ax.legend()
+
+    plt.tight_layout()
+    plt.show()
+    return
+

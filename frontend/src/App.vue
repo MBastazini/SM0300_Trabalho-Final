@@ -1,5 +1,6 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref } from 'vue'
+import Plotly from 'plotly.js-dist-min'
 
 const csvFiles = ref([])
 const selectedCsv = ref('')
@@ -9,6 +10,15 @@ const isLoading = ref(false)
 const isLoadingFiles = ref(true)
 const errorMessage = ref('')
 const normalizedData = ref(null)
+const modelData = ref(null)
+const surfaceChart = ref(null)
+const showLinearSurface = ref(true)
+const showQuadraticSurface = ref(true)
+const estimateYear = ref('')
+const estimateKm = ref('')
+const estimateResult = ref(null)
+const estimateComparisons = ref([])
+const isEstimating = ref(false)
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -42,24 +52,42 @@ async function calculateSelectedCsv() {
   isLoading.value = true
   errorMessage.value = ''
   normalizedData.value = null
+  modelData.value = null
+  showLinearSurface.value = true
+  showQuadraticSurface.value = true
+  estimateResult.value = null
+  estimateComparisons.value = []
+  if (surfaceChart.value) Plotly.purge(surfaceChart.value)
 
   try {
-    const [dataResponse, normalizationResponse] = await Promise.all([
+    const [dataResponse, normalizationResponse, modelsResponse] = await Promise.all([
       fetch(`/api/dados/${encodeURIComponent(selectedCsv.value)}`),
       fetch(`/api/funcoes/normaliza/${encodeURIComponent(selectedCsv.value)}`),
+      fetch(`/api/funcoes/modelos/${encodeURIComponent(selectedCsv.value)}`),
     ])
 
     if (!dataResponse.ok) throw new Error(`HTTP ${dataResponse.status}`)
     if (!normalizationResponse.ok) throw new Error(`HTTP ${normalizationResponse.status}`)
+    if (!modelsResponse.ok) throw new Error(`HTTP ${modelsResponse.status}`)
 
     const data = await dataResponse.json()
     const normalizationData = await normalizationResponse.json()
-    rows.value = data.rows ?? []
+    const models = await modelsResponse.json()
+    rows.value = (data.rows ?? [])
+      .map((row, index) => ({
+        ...row,
+        agioQuadratico: models.quadratic.agio[index] ?? 0,
+      }))
+      .sort((left, right) => left.agioQuadratico - right.agioQuadratico)
     selectedName.value = data.csv_file ?? selectedCsv.value
     normalizedData.value = normalizationData.normalized
+    modelData.value = models
+    await nextTick()
+    renderSurfaceChart()
   } catch (error) {
     rows.value = []
     normalizedData.value = null
+    modelData.value = null
     errorMessage.value = 'Nao foi possivel calcular os dados deste arquivo.'
     console.error(error)
   } finally {
@@ -118,6 +146,199 @@ function formatAxis(value) {
 function formatStat(value) {
   if (!Number.isFinite(Number(value))) return '-'
   return numberFormatter.format(Number(value))
+}
+
+function formatCoefficient(value) {
+  if (!Number.isFinite(Number(value))) return '-'
+  return Number(value).toFixed(6).replace('-0.000000', '0.000000')
+}
+
+function formatReqm(value) {
+  if (!Number.isFinite(Number(value))) return '-'
+  return currencyFormatter.format(Number(value))
+}
+
+function vehicleSituation(agio) {
+  if (agio <= -10) return 'Barganha'
+  if (agio >= 10) return 'Preço acima do valor estimado'
+  return 'Preço justo'
+}
+
+function vehicleSituationClass(agio) {
+  if (agio <= -10) return 'bargain'
+  if (agio >= 10) return 'above'
+  return 'fair'
+}
+
+function formatAgio(value) {
+  if (!Number.isFinite(Number(value))) return '-'
+  return `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1).replace('.', ',')}%`
+}
+
+async function estimateVehiclePrice() {
+  const year = Number(estimateYear.value)
+  const km = Number(estimateKm.value)
+
+  if (!selectedCsv.value || !Number.isFinite(year) || !Number.isFinite(km) || km < 0) {
+    errorMessage.value = 'Informe um ano valido e uma quilometragem igual ou superior a zero.'
+    return
+  }
+
+  isEstimating.value = true
+  errorMessage.value = ''
+
+  try {
+    const response = await fetch(
+      `/api/funcoes/estima/${encodeURIComponent(selectedCsv.value)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ano: year, km }),
+      },
+    )
+
+    if (!response.ok) {
+      const data = await response.json()
+      throw new Error(data.error || `HTTP ${response.status}`)
+    }
+
+    estimateResult.value = await response.json()
+  } catch (error) {
+    estimateResult.value = null
+    errorMessage.value = error.message || 'Nao foi possivel estimar o preço.'
+  } finally {
+    isEstimating.value = false
+  }
+}
+
+function addEstimateToComparison() {
+  if (!estimateResult.value) return
+
+  estimateComparisons.value = [
+    ...estimateComparisons.value,
+    {
+      id: `${Date.now()}-${estimateComparisons.value.length}`,
+      ...estimateResult.value,
+    },
+  ]
+}
+
+function removeEstimate(index) {
+  estimateComparisons.value = estimateComparisons.value.filter((_, itemIndex) => itemIndex !== index)
+}
+
+function updateSurfaceVisibility() {
+  if (!surfaceChart.value) return
+
+  Plotly.restyle(surfaceChart.value, { visible: showLinearSurface.value }, [1])
+  Plotly.restyle(surfaceChart.value, { visible: showQuadraticSurface.value }, [2])
+}
+
+function linearGrid(value) {
+  const ano = value.ano
+  const km = value.km
+  const coefficients = modelData.value.linear.coefficients
+  return coefficients[0] + coefficients[1] * ano + coefficients[2] * km
+}
+
+function quadraticGrid(value) {
+  const ano = value.ano
+  const km = value.km
+  const coefficients = modelData.value.quadratic.coefficients
+  return coefficients[0]
+    + coefficients[1] * ano
+    + coefficients[2] * km
+    + coefficients[3] * ano * ano
+    + coefficients[4] * ano * km
+    + coefficients[5] * km * km
+}
+
+function renderSurfaceChart() {
+  if (!surfaceChart.value || !modelData.value) return
+
+  const points = modelData.value.points
+  const anoValues = points.ano
+  const kmValues = points.km
+  const precoValues = points.preco
+
+  const anoMin = Math.min(...anoValues)
+  const anoMax = Math.max(...anoValues)
+  const kmMin = Math.min(...kmValues)
+  const kmMax = Math.max(...kmValues)
+
+  const anoGrid = Array.from(
+    { length: 24 },
+    (_, index) => anoMin + (index / 23) * (anoMax - anoMin),
+  )
+  const kmGrid = Array.from(
+    { length: 24 },
+    (_, index) => kmMin + (index / 23) * (kmMax - kmMin),
+  )
+
+  const linearSurface = kmGrid.map((km) =>
+    anoGrid.map((ano) => linearGrid({ ano, km })),
+  )
+  const quadraticSurface = kmGrid.map((km) =>
+    anoGrid.map((ano) => quadraticGrid({ ano, km })),
+  )
+
+  const scatterTrace = {
+    type: 'scatter3d',
+    mode: 'markers',
+    name: 'Dados observados',
+    x: anoValues,
+    y: kmValues,
+    z: precoValues,
+    marker: {
+      size: 4,
+      color: precoValues,
+      colorscale: 'Blues',
+      opacity: 0.9,
+    },
+  }
+
+  const linearTrace = {
+    type: 'surface',
+    name: 'Modelo linear',
+    x: anoGrid,
+    y: kmGrid,
+    z: linearSurface,
+    colorscale: 'Blues',
+    opacity: 0.72,
+    showscale: false,
+  }
+
+  const quadraticTrace = {
+    type: 'surface',
+    name: 'Modelo quadratico',
+    x: anoGrid,
+    y: kmGrid,
+    z: quadraticSurface,
+    colorscale: 'Teal',
+    opacity: 0.58,
+    showscale: false,
+  }
+
+  Plotly.react(
+    surfaceChart.value,
+    [scatterTrace, linearTrace, quadraticTrace],
+    {
+      margin: { l: 0, r: 0, b: 0, t: 20 },
+      height: 520,
+      paper_bgcolor: '#ffffff',
+      scene: {
+        xaxis: { title: 'Ano normalizado' },
+        yaxis: { title: 'Km normalizado' },
+        zaxis: { title: 'Preço normalizado' },
+      },
+      legend: {
+        orientation: 'h',
+        x: 0,
+        y: 1,
+      },
+    },
+    { responsive: true, displaylogo: false },
+  )
 }
 
 onMounted(fetchCsvFiles)
@@ -179,16 +400,21 @@ onMounted(fetchCsvFiles)
         </p>
       </section>
 
-      <details v-if="normalizedData" class="process-details">
+      <details v-if="normalizedData && modelData" class="process-details">
         <summary>
           <span>
             <span class="process-step">Etapa intermediaria</span>
-            <strong>Parte 1: Normalizando os dados</strong>
+            <strong>Etapas intermediarias do cálculo</strong>
           </span>
           <span class="expand-label">Expandir</span>
         </summary>
 
         <div class="process-content">
+          <section class="intermediate-section">
+            <div class="intermediate-heading">
+              <span class="part-badge">Parte 1</span>
+              <h3>Normalizando os dados</h3>
+            </div>
           <p class="process-description">
             Distribuicao dos dados normalizados para os parâmetros utilizados no modelo.
           </p>
@@ -241,6 +467,110 @@ onMounted(fetchCsvFiles)
               </div>
             </article>
           </div>
+          </section>
+          <section class="intermediate-section">
+            <div class="intermediate-heading">
+              <span class="part-badge">Parte 2</span>
+              <h3>Definindo os modelos e calculando os coeficientes</h3>
+            </div>
+          <p class="process-description">
+            Os coeficientes são obtidos pelas equações normais XᵀXc = Xᵀp,
+            resolvendo o sistema linear para cada modelo.
+          </p>
+
+          <div class="model-grid">
+            <article class="model-card">
+              <div class="model-heading">
+                <span class="model-badge">Modelo 1</span>
+                <h3>Aproximação linear</h3>
+              </div>
+
+              <div class="formula-block">
+                <span class="formula-label">Modelo</span>
+                <p>p̂(A, K) = c₀ + c₁A + c₂K</p>
+              </div>
+
+              <div class="formula-block">
+                <span class="formula-label">Equação normal</span>
+                <p>(X<sub>lin</sub><sup>T</sup>X<sub>lin</sub>)c<sub>lin</sub> = X<sub>lin</sub><sup>T</sup>P</p>
+              </div>
+
+              <div class="coefficient-list">
+                <span v-for="(coefficient, index) in modelData.linear.coefficients" :key="index">
+                  <small>c{{ index }}</small>
+                  {{ formatCoefficient(coefficient) }}
+                </span>
+              </div>
+
+              <div class="reqm-result">
+                <span>Erro REMQ</span>
+                <strong>{{ formatReqm(modelData.linear.reqm) }}</strong>
+              </div>
+            </article>
+
+            <article class="model-card">
+              <div class="model-heading">
+                <span class="model-badge quadratic-badge">Modelo 2</span>
+                <h3>Aproximação quadrática</h3>
+              </div>
+
+              <div class="formula-block">
+                <span class="formula-label">Modelo</span>
+                <p>p̂(A, K) = c₀ + c₁A + c₂K + c₃A² + c₄AK + c₅K²</p>
+              </div>
+
+              <div class="formula-block">
+                <span class="formula-label">Equação normal</span>
+                <p>(X<sub>quad</sub><sup>T</sup>X<sub>quad</sub>)c<sub>quad</sub> = X<sub>quad</sub><sup>T</sup>P</p>
+              </div>
+
+              <div class="coefficient-list coefficient-list-large">
+                <span v-for="(coefficient, index) in modelData.quadratic.coefficients" :key="index">
+                  <small>c{{ index }}</small>
+                  {{ formatCoefficient(coefficient) }}
+                </span>
+              </div>
+
+              <div class="reqm-result quadratic-reqm">
+                <span>Erro REMQ</span>
+                <strong>{{ formatReqm(modelData.quadratic.reqm) }}</strong>
+              </div>
+            </article>
+          </div>
+
+          <article class="surface-card">
+            <div class="surface-heading">
+              <div>
+                <p class="step-label">Visualização 3D</p>
+                <h3>Dados e superfícies ajustadas</h3>
+              </div>
+              <span class="source-name">{{ selectedName }}</span>
+            </div>
+            <div class="surface-controls" aria-label="Controle das superficies">
+              <button
+                type="button"
+                class="surface-toggle linear-toggle"
+                :class="{ active: showLinearSurface }"
+                :aria-pressed="showLinearSurface"
+                @click="showLinearSurface = !showLinearSurface; updateSurfaceVisibility()"
+              >
+                <span aria-hidden="true"></span>
+                Plano linear
+              </button>
+              <button
+                type="button"
+                class="surface-toggle quadratic-toggle"
+                :class="{ active: showQuadraticSurface }"
+                :aria-pressed="showQuadraticSurface"
+                @click="showQuadraticSurface = !showQuadraticSurface; updateSurfaceVisibility()"
+              >
+                <span aria-hidden="true"></span>
+                Curva quadrática
+              </button>
+            </div>
+            <div ref="surfaceChart" class="surface-chart" aria-label="Grafico tridimensional dos modelos"></div>
+          </article>
+          </section>
         </div>
       </details>
 
@@ -260,6 +590,8 @@ onMounted(fetchCsvFiles)
                 <th scope="col">Ano</th>
                 <th scope="col">Quilometragem</th>
                 <th scope="col">Preço</th>
+                <th scope="col">Ágio</th>
+                <th scope="col">Situação</th>
               </tr>
             </thead>
             <tbody>
@@ -267,6 +599,15 @@ onMounted(fetchCsvFiles)
                 <td><span class="year-badge">{{ row.ano }}</span></td>
                 <td>{{ formatKm(row.km) }}</td>
                 <td class="price-cell">{{ formatCurrency(row.preco) }}</td>
+                <td class="agio-cell">{{ formatAgio(row.agioQuadratico) }}</td>
+                <td>
+                  <span
+                    class="situation-badge"
+                    :class="vehicleSituationClass(row.agioQuadratico)"
+                  >
+                    {{ vehicleSituation(row.agioQuadratico) }}
+                  </span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -277,6 +618,102 @@ onMounted(fetchCsvFiles)
         <div class="empty-icon" aria-hidden="true">CSV</div>
         <h2>Nenhum resultado selecionado</h2>
         <p>Escolha um arquivo CSV e clique em Calcular para visualizar os dados.</p>
+      </section>
+
+      <section v-if="modelData" class="estimate-card" aria-labelledby="estimate-title">
+        <div class="estimate-heading">
+          <div>
+            <p class="step-label">Estimativa final</p>
+            <h2 id="estimate-title">Estime o preço do seu veículo</h2>
+          </div>
+          <span class="source-name">{{ selectedName }}</span>
+        </div>
+
+        <div class="estimate-content">
+          <div class="estimate-form">
+            <label class="estimate-field" for="estimate-year">
+              <span>Ano do veículo</span>
+              <input
+                id="estimate-year"
+                v-model="estimateYear"
+                type="number"
+                min="1886"
+                placeholder="Ex.: 2022"
+              >
+            </label>
+
+            <label class="estimate-field" for="estimate-km">
+              <span>Quilometragem</span>
+              <input
+                id="estimate-km"
+                v-model="estimateKm"
+                type="number"
+                min="0"
+                step="1000"
+                placeholder="Ex.: 48000"
+              >
+            </label>
+
+            <button
+              type="button"
+              class="estimate-button"
+              :disabled="isEstimating || !estimateYear || !estimateKm"
+              @click="estimateVehiclePrice"
+            >
+              {{ isEstimating ? 'Estimando...' : 'Estimar preço' }}
+            </button>
+          </div>
+
+          <div v-if="estimateResult" class="estimate-result">
+            <article>
+              <span>Modelo linear</span>
+              <strong>{{ formatCurrency(estimateResult.linear) }}</strong>
+            </article>
+            <article class="quadratic-estimate">
+              <span>Modelo quadrático</span>
+              <strong>{{ formatCurrency(estimateResult.quadratic) }}</strong>
+            </article>
+
+            <button
+              type="button"
+              class="compare-button"
+              @click="addEstimateToComparison"
+            >
+              <span aria-hidden="true">+</span>
+              Adicionar à comparação
+            </button>
+          </div>
+
+          <div v-if="estimateComparisons.length" class="comparisons">
+            <div class="comparisons-heading">
+              <h3>Estimativas adicionadas</h3>
+              <span>{{ estimateComparisons.length }} {{ estimateComparisons.length === 1 ? 'veículo' : 'veículos' }}</span>
+            </div>
+            <div class="comparison-list">
+              <article
+                v-for="(estimate, index) in estimateComparisons"
+                :key="estimate.id"
+                class="comparison-item"
+              >
+                <div class="comparison-data">
+                  <strong>{{ estimate.ano }} · {{ formatKm(estimate.km) }}</strong>
+                  <span>
+                    Linear {{ formatCurrency(estimate.linear) }} ·
+                    Quadrático {{ formatCurrency(estimate.quadratic) }}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  class="remove-comparison"
+                  :aria-label="`Remover estimativa ${index + 1}`"
+                  @click="removeEstimate(index)"
+                >
+                  ×
+                </button>
+              </article>
+            </div>
+          </div>
+        </div>
       </section>
     </section>
   </main>
