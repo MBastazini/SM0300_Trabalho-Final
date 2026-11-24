@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 
 #ARQUIVO PARA DEFINIR AS EQUACOES A SEREM UTILIZADAS
@@ -143,6 +144,7 @@ def plotar_modelo_3d(A, K, P, c, tipo_solucao):
 
     plt.tight_layout()
     plt.show()
+    return
 
 #PASSO 4
 def REQM(valor_aproximado, valor_real): #Raiz erro quadratico médio
