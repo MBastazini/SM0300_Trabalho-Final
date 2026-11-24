@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 
 #ARQUIVO PARA DEFINIR AS EQUACOES A SEREM UTILIZADAS
@@ -36,7 +37,7 @@ def normaliza(x):
     linear a ser resolvido, a solu ̧c ̃ao obtida e um gr ́afico mostrando a superf ́ıcie ajustada juntamente com os pontos
     coletados;
 """
-#PASSO 3 (Linear)
+#PASSO 3
 def solucao_sistema(A, K, P, tipo_solucao):
     """
         A -> Ano normalizado
@@ -83,47 +84,67 @@ def solucao_sistema(A, K, P, tipo_solucao):
     else:
       X_approx = np.column_stack([ones, A, K, A**2, A * K, K**2])
 
-    M_lin = X_approx.T @ X_approx
-    b_lin = X_approx.T @ P
-    c_lin = np.linalg.solve(M_lin, b_lin)
+    M = X_approx.T @ X_approx
+    b = X_approx.T @ P
+    c = np.linalg.solve(M, b)
 
+    return [M, b, c]
 
-    return [M_lin, b_lin, c_lin]
-
-    #print("=== SISTEMA LINEAR (3x3) ===")
-    #print("Matriz X^T X:\n", np.round(M_lin, 4))
-    #print("Vetor X^T y:\n", np.round(b_lin, 4))
-    #print("Coeficientes [c0, c1, c2]:\n", np.round(c_lin, 4))
-
-    #print("\n=== SISTEMA QUADRÁTICO (6x6) ===")
-    #print("Matriz X^T X:\n", np.round(M_quad, 4))
-    #print("Vetor X^T y:\n", np.round(b_quad, 4))
-    #print("Coeficientes [c0, c1, c2, c3, c4, c5]:\n", np.round(c_quad, 4))
-
-    #print("\n=== SISTEMA QUADRÁTICO (6x6) ===")
-    #print("Matriz X^T X:\n", np.round(M_quad, 4))
-    #print("Vetor X^T y:\n", np.round(b_quad, 4))
-    #print("Coeficientes [c0, c1, c2, c3, c4, c5]:\n", np.round(c_quad, 4))
-
-
-
+def plotar_modelo_3d(A, K, P, c, tipo_solucao):
     """
-      a_grid = np.linspace(A.min(), A.max(), 30)
-      k_grid = np.linspace(K.min(), K.max(), 30)
-      AA, KK = np.meshgrid(a_grid, k_grid)
-
-      PP_lin = c_lin[0] + c_lin[1] * AA + c_lin[2] * KK
-      PP_quad = (
-          c_quad[0]
-          + c_quad[1] * AA
-          + c_quad[2] * KK
-          + c_quad[3] * AA**2
-          + c_quad[4] * AA * KK
-          + c_quad[5] * KK**2
-      )
-
-      fig = plt.figure(figsize=(14, 6))
+    Gera um gráfico 3D comparando os dados reais com a superfície ajustada (linear ou quadrática).
+    
+    Parâmetros:
+        A -> Array com Ano normalizado
+        K -> Array com Quilometragem normalizada
+        P -> Array com Preço normalizado
+        c -> Vetor de coeficientes retornado por solucao_sistema
+        tipo_solucao -> 'lin' ou 'quad'
     """
+    # 1. Criar uma malha (grid) regular de pontos entre os valores mínimos e máximos de A e K
+    a_grid = np.linspace(np.min(A), np.max(A), 30)
+    k_grid = np.linspace(np.min(K), np.max(K), 30)
+    A_mesh, K_mesh = np.meshgrid(a_grid, k_grid)
+
+    # 2. Calcular o Preço estimado (P_hat) para cada ponto da malha usando os coeficientes 'c'
+    if tipo_solucao == 'lin':
+        # p̂(A,K) = c0 + c1*A + c2*K
+        P_mesh = c[0] + c[1]*A_mesh + c[2]*K_mesh
+        titulo = 'Ajuste Linear (Plano)'
+    elif tipo_solucao == 'quad':
+        # p̂(A,K) = c0 + c1*A + c2*K + c3*A^2 + c4*A*K + c5*K^2
+        P_mesh = (c[0] + c[1]*A_mesh + c[2]*K_mesh + 
+                  c[3]*(A_mesh**2) + c[4]*(A_mesh * K_mesh) + c[5]*(K_mesh**2))
+        titulo = 'Ajuste Quadrático (Superfície Curva)'
+    else:
+        raise ValueError("tipo_solucao deve ser 'lin' ou 'quad'")
+
+    # 3. Configurar a figura e o eixo 3D
+    fig = plt.figure(figsize=(10, 7))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Plotar os dados reais (pontos de dispersão)
+    ax.scatter(A, K, P, color='crimson', s=40, alpha=0.8, label='Dados Reais')
+
+    # Plotar a superfície do modelo ajustado
+    superficie = ax.plot_surface(A_mesh, K_mesh, P_mesh, cmap='viridis', alpha=0.55, edgecolor='none')
+
+    # 4. Rótulos, barra de cores e ajustes visuais
+    ax.set_xlabel('Ano Normalizado (A)', labelpad=10)
+    ax.set_ylabel('Quilometragem Normalizada (K)', labelpad=10)
+    ax.set_zlabel('Preço Normalizado (P)', labelpad=10)
+    ax.set_title(f'Regressão por Mínimos Quadrados - {titulo}', fontsize=13, pad=15)
+    
+    # Adiciona legenda e barra de escala do preço previsto
+    ax.legend(loc='upper left')
+    fig.colorbar(superficie, ax=ax, shrink=0.5, aspect=10, label='Preço Estimado')
+
+    # Ajusta o ângulo de visão inicial (elevação, azimute)
+    ax.view_init(elev=25, azim=-135)
+
+    plt.tight_layout()
+    plt.show()
+    return
 
 #PASSO 4
 def REQM(valor_aproximado, valor_real): #Raiz erro quadratico médio
@@ -156,4 +177,47 @@ def agio_percentual(valor_aproximado, valor_real):
         agio[i] = 100*(valor_real[i] - valor_aproximado[i]) / valor_aproximado[i]
 
     return agio
+
+
+def plotar_agio(agio, titulo=''):
+    """
+    Gera um gráfico de barras com o ágio percentual de cada anúncio.
+
+    Cores: verde = boa oportunidade (h <= -10%), azul = preço justo (|h| < 10%),
+           vermelho = muito acima (h >= 10%).
+    A melhor barganha (menor ágio) é destacada com uma seta.
+
+    Parâmetros:
+        agio   -> Array com o ágio percentual de cada anúncio (saída de agio_percentual)
+        titulo -> Texto extra para o título (ex.: 'Onix - modelo lin')
+    """
+    agio = np.asarray(agio)
+    indices = np.arange(1, len(agio) + 1)
+    cores = ['#2ecc71' if h <= -10 else '#e74c3c' if h >= 10 else '#3498db' for h in agio]
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ax.bar(indices, agio, color=cores, edgecolor='black', linewidth=0.4)
+
+    # Linha zero e limites de +-10%
+    ax.axhline(0, color='black', linewidth=1)
+    ax.axhline(10, color='#e74c3c', linestyle='--', linewidth=1.2, label='+10% (muito acima)')
+    ax.axhline(-10, color='#2ecc71', linestyle='--', linewidth=1.2, label='-10% (boa oportunidade)')
+
+    # Destaque na melhor barganha
+    i = int(np.argmin(agio))
+    ax.annotate(f'Melhor barganha\n#{i + 1}: {agio[i]:.1f}%',
+                xy=(i + 1, agio[i]), xytext=(i + 1, agio[i] - 9),
+                ha='center', fontweight='bold', color='#1e8449',
+                arrowprops=dict(arrowstyle='->', color='#1e8449', lw=1.5))
+    ax.set_ylim(np.min(agio) - 15, np.max(agio) + 5)
+
+    ax.set_title(f'Ágio percentual por anúncio - {titulo}')
+    ax.set_xlabel('Índice do anúncio (i)')
+    ax.set_ylabel('Ágio $h_i$ (%)')
+    ax.grid(axis='y', linestyle=':', alpha=0.6)
+    ax.legend()
+
+    plt.tight_layout()
+    plt.show()
+    return
 
