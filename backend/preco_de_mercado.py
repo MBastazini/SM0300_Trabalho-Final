@@ -131,7 +131,22 @@ if __name__ == "__main__":
 
     print(f"REQM linear: R$ {reqm_lin:.2f} | REQM quadratico: R$ {reqm_quad:.2f}")
 
-    #TODO: Analisar agil assim como exigido
+    print("Passo 5 -> Classificando os anúncios pelo ágio")
+    for tipo, agio, estimado in [('lin', agio_lin, preco_estimado_lin_reais), ('quad', agio_quad, preco_estimado_quad_reais)]:
+        justos = np.sum(np.abs(agio) < 10)
+        acima = np.sum(agio >= 10)
+        oportunidades = np.sum(agio <= -10)
+
+        # Melhor barganha: anúncio com o menor ágio (maior desconto em relação ao estimado)
+        i = int(np.argmin(agio))
+        ano_i = desnormalize_values(onix_data['ano'][i], onix_data['ano_stats'])
+        km_i = desnormalize_values(onix_data['km'][i], onix_data['km_stats'])
+
+        print(f"[{tipo}] Preço justo: {justos} | Muito acima: {acima} | Boas oportunidades: {oportunidades}")
+        print(f"[{tipo}] Melhor barganha: anúncio #{i + 1} ({ano_i:.0f}, {km_i:.0f} km) - "
+              f"anunciado R$ {preco_real[i]:.2f}, estimado R$ {estimado[i]:.2f}, ágio {agio[i]:.2f}%")
+
+        mq.plotar_agio(agio, f'Onix - modelo {tipo}')
 
 
     print("Passo 6 -> Estimando o preço do carro do Bob")
@@ -169,7 +184,7 @@ if __name__ == "__main__":
     agio_dol = mq.agio_percentual(preco_estimado_dol, preco_real_dol)
     print(f"REQM Dolphin: R$ {reqm_dol:.2f}")
 
-    # Depreciação no carro médio de cada amostra (os dois carros não têm anos em comum)
+    # Depreciação no carro médio de cada amostra
     for nome, data, c in [('Onix', onix_data, c_lin), ('Dolphin Mini', dolphin_data, c_dol)]:
         ano_ref = data['ano_stats'][2]
         km_ref = data['km_stats'][2]
@@ -179,5 +194,3 @@ if __name__ == "__main__":
         dep_1ano = atual - estima_preco(ano_ref - 1, km_ref, c, 'lin', data)
 
         print(f"[{nome}] +10000 km: R$ {dep_10000:.2f} ({100*dep_10000/atual:.2f}%) | 1 ano mais velho: R$ {dep_1ano:.2f} ({100*dep_1ano/atual:.2f}%)")
-
-    
