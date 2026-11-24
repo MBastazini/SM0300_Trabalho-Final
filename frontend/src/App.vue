@@ -12,6 +12,7 @@ const errorMessage = ref('')
 const normalizedData = ref(null)
 const modelData = ref(null)
 const surfaceChart = ref(null)
+const agioChart = ref(null)
 const showLinearSurface = ref(true)
 const showQuadraticSurface = ref(true)
 const estimateYear = ref('')
@@ -58,6 +59,7 @@ async function calculateSelectedCsv() {
   estimateResult.value = null
   estimateComparisons.value = []
   if (surfaceChart.value) Plotly.purge(surfaceChart.value)
+  if (agioChart.value) Plotly.purge(agioChart.value)
 
   try {
     const [dataResponse, normalizationResponse, modelsResponse] = await Promise.all([
@@ -84,6 +86,7 @@ async function calculateSelectedCsv() {
     modelData.value = models
     await nextTick()
     renderSurfaceChart()
+    renderAgioChart()
   } catch (error) {
     rows.value = []
     normalizedData.value = null
@@ -341,6 +344,119 @@ function renderSurfaceChart() {
   )
 }
 
+function renderAgioChart() {
+  if (!agioChart.value || !modelData.value) return
+
+  const agioValues = modelData.value.quadratic.agio.map(Number)
+  if (!agioValues.length) return
+
+  const ordered = agioValues
+    .map((value, index) => ({ value, index: index + 1 }))
+    .sort((left, right) => left.value - right.value)
+
+  const colors = ordered.map(({ value }) => (
+    value <= -10 ? '#22c55e' : value >= 10 ? '#ef4444' : '#3b82f6'
+  ))
+
+  const minimum = Math.min(...agioValues, -10)
+  const maximum = Math.max(...agioValues, 10)
+
+  Plotly.react(
+    agioChart.value,
+    [{
+      type: 'bar',
+      x: ordered.map(({ index }) => `#${index}`),
+      y: ordered.map(({ value }) => value),
+      marker: {
+        color: colors,
+        line: { color: '#ffffff', width: 0.5 },
+      },
+      hovertemplate: 'Veículo %{x}<br>Ágio: %{y:.1f}%<extra></extra>',
+    }],
+    {
+      margin: { l: 55, r: 20, b: 55, t: 35 },
+      height: 340,
+      paper_bgcolor: '#ffffff',
+      plot_bgcolor: '#ffffff',
+      bargap: 0.18,
+      title: {
+        text: 'Distribuição do ágio - modelo quadrático',
+        font: { size: 15, color: '#0f172a' },
+      },
+      xaxis: {
+        title: 'Veículos (ordenados pela melhor barganha)',
+        tickangle: -45,
+      },
+      yaxis: {
+        title: 'Ágio (%)',
+        zeroline: true,
+        zerolinecolor: '#0f172a',
+        zerolinewidth: 2,
+        range: [
+          Math.min(minimum - 5, -15),
+          Math.max(maximum + 5, 15),
+        ],
+      },
+      shapes: [
+        {
+          type: 'line',
+          xref: 'paper',
+          x0: 0,
+          x1: 1,
+          y0: 10,
+          y1: 10,
+          line: { color: '#ef4444', width: 1.5, dash: 'dash' },
+        },
+        {
+          type: 'line',
+          xref: 'paper',
+          x0: 0,
+          x1: 1,
+          y0: -10,
+          y1: -10,
+          line: { color: '#22c55e', width: 1.5, dash: 'dash' },
+        },
+      ],
+      annotations: [
+        {
+          xref: 'paper',
+          yref: 'y',
+          x: 1,
+          y: 10,
+          text: '+10%',
+          showarrow: false,
+          xanchor: 'right',
+          yanchor: 'bottom',
+          font: { color: '#b91c1c', size: 11 },
+        },
+        {
+          xref: 'paper',
+          yref: 'y',
+          x: 1,
+          y: -10,
+          text: '-10%',
+          showarrow: false,
+          xanchor: 'right',
+          yanchor: 'top',
+          font: { color: '#15803d', size: 11 },
+        },
+        {
+          xref: 'paper',
+          yref: 'y',
+          x: 1,
+          y: 0,
+          text: 'Preço justo',
+          showarrow: false,
+          xanchor: 'right',
+          yanchor: 'bottom',
+          font: { color: '#1d4ed8', size: 11 },
+        },
+      ],
+    },
+    { responsive: true, displaylogo: false },
+  )
+}
+
 onMounted(fetchCsvFiles)
 </script>
 
@@ -582,6 +698,21 @@ onMounted(fetchCsvFiles)
           </div>
           <span class="source-name" :title="selectedName">{{ selectedName }}</span>
         </div>
+
+        <article class="agio-chart-card">
+          <div class="agio-chart-heading">
+            <div>
+              <p class="step-label">Histograma do ágio</p>
+              <h3>Ajuste quadrático</h3>
+            </div>
+            <div class="agio-legend" aria-label="Legenda do histograma">
+              <span><i class="legend-green"></i>Barganha</span>
+              <span><i class="legend-blue"></i>Preço justo</span>
+              <span><i class="legend-red"></i>Acima do valor</span>
+            </div>
+          </div>
+          <div ref="agioChart" class="agio-chart" aria-label="Histograma do agio pelo ajuste quadratico"></div>
+        </article>
 
         <div class="table-wrap">
           <table>

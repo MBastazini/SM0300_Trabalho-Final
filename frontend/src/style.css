@@ -620,6 +620,69 @@ select {
   overflow-y: auto;
 }
 
+.agio-chart-card {
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  overflow: hidden;
+}
+
+.agio-chart-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px 0;
+}
+
+.agio-chart-heading h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.agio-chart-heading .step-label {
+  margin-bottom: 3px;
+}
+
+.agio-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.agio-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.agio-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legend-green {
+  background: #22c55e;
+}
+
+.legend-blue {
+  background: #3b82f6;
+}
+
+.legend-red {
+  background: #ef4444;
+}
+
+.agio-chart {
+  width: 100%;
+  min-height: 340px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -985,6 +1048,14 @@ tbody tr:hover {
 
   .estimate-heading {
     align-items: flex-start;
+  }
+
+  .agio-chart-heading {
+    align-items: flex-start;
+  }
+
+  .agio-legend {
+    justify-content: flex-start;
   }
 
   .estimate-form,
