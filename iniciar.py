@@ -69,9 +69,12 @@ def main():
     if npm is None:
         sys.exit("Node.js/npm não encontrado. Instale em https://nodejs.org e tente de novo.")
 
-    # Na primeira vez, instala as dependências do frontend
-    if not (FRONTEND / "node_modules").is_dir():
-        print("Instalando dependências do frontend (só na primeira vez)...")
+    # Instala as dependências do frontend na primeira vez e sempre que alguém
+    # adicionar um pacote novo (package-lock.json mais novo que o node_modules)
+    lock = FRONTEND / "package-lock.json"
+    instalado = FRONTEND / "node_modules" / ".package-lock.json"
+    if not instalado.is_file() or (lock.is_file() and lock.stat().st_mtime > instalado.stat().st_mtime):
+        print("Instalando dependências do frontend...")
         subprocess.run([npm, "install"], cwd=FRONTEND, check=True)
 
     processos = []
