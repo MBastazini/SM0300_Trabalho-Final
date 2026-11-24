@@ -8,8 +8,10 @@ onix_data = preco_de_mercado.get_onix_normalizado()
 print("Passo 3 -> Estimando os coeficientes do modelo (linear e quadratico)")
 [M_lin, b_lin, c_lin] = mq.solucao_sistema(onix_data['ano'], onix_data['km'], onix_data['preco'], 'lin')
 print(f"Coeficientes do modelo linear: {M_lin}, {b_lin}, {c_lin}")
+mq.plotar_modelo_3d(onix_data['ano'], onix_data['km'], onix_data['preco'], c_lin, 'lin')
 [M_quad, b_quad, c_quad] = mq.solucao_sistema(onix_data['ano'], onix_data['km'], onix_data['preco'], 'quad')
 print(f"Coeficientes do modelo quadratico: {M_quad}, {b_quad}, {c_quad}")
+mq.plotar_modelo_3d(onix_data['ano'], onix_data['km'], onix_data['preco'], c_quad, 'quad')
 
 print("Determinando os valores estimados...")
 
