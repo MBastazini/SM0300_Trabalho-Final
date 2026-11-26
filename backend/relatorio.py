@@ -23,7 +23,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 import minimos_quadrados as mq
-from preco_de_mercado import desnormalize_values, estima_preco
+from preco_de_mercado import estima_valor
 
 RAIZ = Path(__file__).resolve().parent.parent
 PASTA_GRAFICOS = RAIZ / "graficos"
@@ -81,18 +81,16 @@ def normaliza_matriz(dados):
 
 def matriz_planejamento(A, K, tipo):
     """Matriz X do ajuste: [1 | A | K] no linear e [1 | A | K | A² | AK | K²] no quadrático."""
-    if tipo == 'lin':
-        return np.column_stack((np.ones_like(A), A, K))
-    return np.column_stack((np.ones_like(A), A, K, A**2, A * K, K**2))
+    return mq.montar_matriz_X([A, K], tipo)
 
 
 def depreciacao(ano, km, c, tipo, data):
     """Queda de preço (R$ e %) do carro (ano, km) com +8000 km, +10000 km e 1 ano a mais de idade."""
-    atual = estima_preco(ano, km, c, tipo, data)
+    atual = estima_valor({'ano': ano, 'km': km}, tipo, data, c)
     quedas = {
-        '+8000 km': atual - estima_preco(ano, km + 8000, c, tipo, data),
-        '+10000 km': atual - estima_preco(ano, km + 10000, c, tipo, data),
-        '1 ano mais velho': atual - estima_preco(ano - 1, km, c, tipo, data),
+        '+8000 km': atual - estima_valor({'ano': ano, 'km': km + 8000}, tipo, data, c),
+        '+10000 km': atual - estima_valor({'ano': ano, 'km': km + 10000}, tipo, data, c),
+        '1 ano mais velho': atual - estima_valor({'ano': ano - 1, 'km': km}, tipo, data, c),
     }
     return atual, {nome: (queda, 100 * queda / atual) for nome, queda in quedas.items()}
 
@@ -147,7 +145,7 @@ def relatorio(dados, nome='carro', ano_carro=None, km_carro=None, pasta=PASTA_GR
         print("-" * largura)
 
         # PASSO 3: sistema linear (equações normais) e solução
-        M, b, c = mq.solucao_sistema(data['ano'], data['km'], data['preco'], tipo)
+        M, b, c = mq.solucao_sistema([data['ano'], data['km']], data['preco'], tipo)
         print("\nPASSO 3 - SISTEMA DE EQUAÇÕES NORMAIS")
         print("  (X^T X) c = X^T y")
         print("  M = X^T X")
@@ -161,7 +159,7 @@ def relatorio(dados, nome='carro', ano_carro=None, km_carro=None, pasta=PASTA_GR
 
         # Preço estimado de cada anúncio, em reais
         X = matriz_planejamento(data['ano'], data['km'], tipo)
-        estimado = desnormalize_values(X @ c, data['preco_stats'])
+        estimado = mq.desnormalize_test_values(X @ c, data['preco_stats'])
 
         # PASSO 4: REQM
         reqm = mq.REQM(estimado, preco_real)

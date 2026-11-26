@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from itertools import combinations_with_replacement
 
 #ARQUIVO PARA DEFINIR AS EQUACOES A SEREM UTILIZADAS
 
@@ -32,51 +33,124 @@ def normaliza(x):
     return [(x - med_x) / (max_x - min_x), [min_x, max_x, med_x]]
 
 
-"""
-    3. Formule o problema de ajuste e estime os coeficientes do modelo (linear e quadr ́atico). Apresente o sistema
-    linear a ser resolvido, a solu ̧c ̃ao obtida e um gr ́afico mostrando a superf ́ıcie ajustada juntamente com os pontos
-    coletados;
-"""
-#PASSO 3
-def solucao_sistema(A, K, P, grau):
-    """
-    Monta e resolve o sistema normal (X^T X) c = X^T P para um polinômio 2D de grau n.
-
-    Parâmetros:
-        A (array-like): Ano normalizado
-        K (array-like): Quilometragem normalizada
-        P (array-like): Preço normalizado
-        grau (int): Grau n do polinômio de aproximação (ex: 1 para linear, 2 para quadrático, etc.)
-
-    Retorna:
-        list: [M, b, c] onde M = X^T X, b = X^T P e c é o vetor de coeficientes.
-    """
-    A = np.asarray(A, dtype=float)
-    K = np.asarray(K, dtype=float)
-    P = np.asarray(P, dtype=float)
+def montar_matriz_X(variaveis, grau):
 
     if grau == "lin":
         grau = 1
     elif grau == "quad":
         grau = 2
 
-    if not isinstance(grau, int) or grau < 0:
+    if not isinstance(grau, int) or isinstance(grau, bool) or grau < 0:
         raise ValueError("O parâmetro 'grau' deve ser um número inteiro maior ou igual a 0.")
 
-    # Gera dinamicamente as colunas [1, A, K, A^2, A*K, K^2, ..., A^n, ..., K^n]
-    colunas = []
-    for d in range(grau + 1):           # d percorre cada grau de 0 até n
-        for j in range(d + 1):          # j é o expoente de K (de 0 até d)
-            i = d - j                   # i é o expoente de A (de d até 0)
-            colunas.append((A ** i) * (K ** j))
+    if len(variaveis) < 1:
+        raise ValueError("A lista de variáveis não pode estar vazia.")
 
-    X_approx = np.column_stack(colunas)
+    variaveis = [np.atleast_1d(np.asarray(v, dtype=float)) for v in variaveis]
+    n_amostras = len(variaveis[0])
+    if any(len(v) != n_amostras for v in variaveis):
+        raise ValueError("Todas as variáveis devem ter o mesmo tamanho.")
+    colunas = []
+    for d in range(grau + 1):
+        for comb in combinations_with_replacement(range(len(variaveis)), d):
+            """
+            Assumindo que só tenho duas variaveis, A = 0 e k = 1, teriamos:
+            comb = () -> 1
+            comb = (0,), (1,) -> A, K
+            comb = (0, 0), (0, 1), (1, 1) -> A^2, A*K, K^2
+            comb = (0, 0, 0), (0, 0, 1), (0, 1, 1), (1, 1, 1) -> A^3, A^2*K, A*K^2, K^3
+            """
+            termo = np.ones(n_amostras, dtype=float)
+            for i in comb:
+                termo *= variaveis[i]
+            colunas.append(termo)
+    return np.column_stack(colunas)
+
+"""
+    3. Formule o problema de ajuste e estime os coeficientes do modelo (linear e quadr ́atico). Apresente o sistema
+    linear a ser resolvido, a solu ̧c ̃ao obtida e um gr ́afico mostrando a superf ́ıcie ajustada juntamente com os pontos
+    coletados;
+"""
+#PASSO 3
+def solucao_sistema(variaveis, variavel_alvo_array, grau):
+    """
+    Monta e resolve o sistema normal (X^T X) c = X^T y para um polinômio multivariável de grau n.
+
+    Parâmetros:
+        variaveis (list): Lista de arrays-like com as variáveis independentes
+        variavel_alvo_array (array-like): Array com a variável dependente
+        grau (int ou str): Grau n do polinômio de aproximação (ex: 1/'lin', 2/'quad', etc.)
+
+    Retorna:
+        list: [M, b, c] onde M = X^T X, b = X^T y e c é o vetor de coeficientes.
+    """
+    variavel_alvo_array = np.asarray(variavel_alvo_array, dtype=float)
+
+    X_approx = montar_matriz_X(variaveis, grau)
+
+    if len(variavel_alvo_array) != X_approx.shape[0]:
+        raise ValueError("O tamanho da variável dependente não corresponde ao número de amostras em X.")
 
     M = X_approx.T @ X_approx
-    b = X_approx.T @ P
+    b = X_approx.T @ variavel_alvo_array
     c = np.linalg.solve(M, b)
 
     return [M, b, c]
+
+#PASSO 4
+def REQM(valores_aproximados, valores_reais): #Raiz erro quadratico médio
+    erro2 = 0
+
+    #Somatoria do erro
+    for i in range(len(valores_reais)):
+        erro2 += (valores_reais[i] - valores_aproximados[i])**2
+
+    #Retorna a raiz do erro quadratico médio
+    return np.sqrt(erro2 / len(valores_reais))
+
+
+#PASSO 5
+def agio_percentual(valores_aproximados, valores_reais):
+    """
+    Calcula o ágio percentual de cada anúncio: h_i = 100 * (p_i - p(a_i, k_i)) / p(a_i, k_i)
+
+    Parâmetros (em reais, não normalizados):
+    valores_aproximados (array-like): Preços aproximados obtidos pelo modelo, p(a_i, k_i).
+    valores_reais (array-like): Preços reais observados, p_i.
+
+    Retorna:
+    array: Ágio percentual de cada anúncio.
+    """
+    agio = np.zeros(len(valores_reais))
+
+    for i in range(len(valores_reais)):
+        # O denominador é o preço estimado pelo modelo, conforme o enunciado
+        agio[i] = 100*(valores_reais[i] - valores_aproximados[i]) / valores_aproximados[i]
+
+    return agio
+
+def normalize_test_values(valor, stats):
+    """
+    Normaliza um valor (ou array) usando stats = [min, max, media] guardados em data['<parametro>_stats'].
+    """
+    valor = np.asarray(valor, dtype=float)
+    amplitude = stats[1] - stats[0]
+    if amplitude == 0:
+        return np.zeros_like(valor, dtype=float)
+    # Aplica a normalização: X = (x - media) / (max - min)
+    return (valor - stats[2]) / amplitude
+
+def desnormalize_test_values(valor_normalizado, stats):
+    """
+    Desfaz a normalização: converte um valor normalizado de volta para a escala original.
+    stats é a lista [min, max, media] guardada em data['<parametro>_stats'].
+
+    Inverte X = (x - media) / (max - min)  =>  x = media + X * (max - min)
+    """
+    valor_normalizado = np.asarray(valor_normalizado, dtype=float)
+    return stats[2] + valor_normalizado * (stats[1] - stats[0])
+
+#FUNCOES AUXILIARES DE GRAFICOS
 
 
 def plotar_modelo_3d(A, K, P, c, grau, titulo='', arquivo=None):
@@ -158,38 +232,6 @@ def plotar_modelo_3d(A, K, P, c, grau, titulo='', arquivo=None):
     plt.tight_layout()
     mostrar_ou_salvar(fig, arquivo)
     return
-
-#PASSO 4
-def REQM(valor_aproximado, valor_real): #Raiz erro quadratico médio
-    erro2 = 0
-
-    #Somatoria do erro
-    for i in range(len(valor_real)):
-        erro2 += (valor_real[i] - valor_aproximado[i])**2
-
-    #Retorna a raiz do erro quadratico médio
-    return np.sqrt(erro2 / len(valor_real))
-
-
-#PASSO 5
-def agio_percentual(valor_aproximado, valor_real):
-    """
-    Calcula o ágio percentual de cada anúncio: h_i = 100 * (p_i - p(a_i, k_i)) / p(a_i, k_i)
-
-    Parâmetros (em reais, não normalizados):
-    valor_aproximado (array-like): Preços aproximados obtidos pelo modelo, p(a_i, k_i).
-    valor_real (array-like): Preços reais observados, p_i.
-
-    Retorna:
-    array: Ágio percentual de cada anúncio.
-    """
-    agio = np.zeros(len(valor_real))
-
-    for i in range(len(valor_real)):
-        # O denominador é o preço estimado pelo modelo, conforme o enunciado
-        agio[i] = 100*(valor_real[i] - valor_aproximado[i]) / valor_aproximado[i]
-
-    return agio
 
 
 def plotar_agio(agio, titulo='', arquivo=None):

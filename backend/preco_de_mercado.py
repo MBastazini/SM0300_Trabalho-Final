@@ -49,52 +49,45 @@ def normalize_values(csv_file, parameter_list):
     
     return normalized_data
 
-#Funcao pra testar a API
-def get_onix_normalizado():
-    """
-    Retorna os valores normalizados do arquivo 'onix_bruto.csv' para os parâmetros 'ano', 'preco' e 'km'.
-    """
-    return normalize_values('onix_bruto.csv', ['ano', 'preco', 'km'])
 
-def get_dolphin_normalizado():
+def estima_valor(variaveis, grau, data, c, variavel_alvo="preco"):
     """
-    Retorna os valores normalizados do arquivo 'dolphin_mini_bruto.csv' para os parâmetros 'ano', 'preco' e 'km'.
+    Estima o valor da variável variavel_alvo (por padrão, 'preco') usando o modelo polinomial ajustado.
+
+    Parâmetros:
+        variaveis (dict): Dicionário {nome_da_variavel: valor_ou_array} na mesma ordem usada em solucao_sistema.
+                          Ex.: {'ano': 2022, 'km': 48000} ou {'ano': [2022, 2023], 'km': [48000, 10000]}.
+        grau (int ou str): Grau do polinômio a ser usado na estimativa ('lin', 'quad' ou inteiro >= 0).
+        data (dict): Dados normalizados contendo '<variavel>_stats' para cada variável e para o variavel_alvo.
+        c (array-like): Coeficientes do modelo obtidos em solucao_sistema.
+        variavel_alvo (str): Nome da variável dependente a ser desnormalizada (padrão: 'preco').
+
+    Retorna:
+        float ou np.ndarray: Valor estimado na escala original (float para entrada escalar,
+                             ou np.ndarray quando as entradas forem listas/arrays).
     """
-    return normalize_values('dolphin_mini_bruto.csv', ['ano', 'preco', 'km'])
+    if not isinstance(variaveis, dict) or len(variaveis) == 0:
+        raise ValueError("'variaveis' deve ser um dicionário não vazio (ex.: {'ano': 2022, 'km': 48000}).")
 
-def normalize_test_values(ano, km, data):
-    """
-    Normaliza os valores de ano e km fornecidos com base nos valores normalizados do arquivo 'onix_bruto.csv'.
-    Retorna os valores normalizados de ano e km.
-    """
-    
-    # Normaliza os valores fornecidos com base nos valores min, max e media do onix
-    ano_stats = data['ano_stats']
-    km_stats = data['km_stats']
-    
-    ano_normalized = (ano - ano_stats[2]) / (ano_stats[1] - ano_stats[0])
-    km_normalized = (km - km_stats[2]) / (km_stats[1] - km_stats[0])
-    
-    return ano_normalized, km_normalized
+    if f"{variavel_alvo}_stats" not in data:
+        raise ValueError(f"Missing normalization stats for target '{variavel_alvo}' in data.")
 
-def desnormalize_values(valor_normalizado, stats):
-    """
-    Desfaz a normalização: converte um valor normalizado de volta para a escala original.
-    stats é a lista [min, max, media] guardada em data['<parametro>_stats'].
+    entrada_escalar = all(np.ndim(v) == 0 for v in variaveis.values())
 
-    Inverte X = (x - media) / (max - min)  =>  x = media + X * (max - min)
-    """
-    return stats[2] + valor_normalizado * (stats[1] - stats[0])
+    variaveis_normalizadas = []
+    for nome, valor in variaveis.items():
+        if f"{nome}_stats" not in data:
+            raise ValueError(f"Missing normalization stats for variable '{nome}' in data.")
+        variaveis_normalizadas.append(mq.normalize_test_values(valor, data[f"{nome}_stats"]))
 
-def estima_preco(ano, km, c, grau, data):
-    """Preço em R$ estimado pelo modelo polinomial de grau n para um carro (ano-modelo, km)."""
-    A, K = normalize_test_values(ano, km, data)
+    matriz_X = mq.montar_matriz_X(variaveis_normalizadas, grau)
 
-    termos = [
-        (A ** (d - j)) * (K ** j)
-        for d in range(grau + 1)
-        for j in range(d + 1)
-    ]
-    X = np.array(termos, dtype=float)
+    # Confere se os coeficientes c têm o tamanho correto para a matriz_X
+    if matriz_X.shape[1] != len(c):
+        raise ValueError(f"Mismatch between number of coefficients ({len(c)}) and number of features ({matriz_X.shape[1]}).")
 
-    return desnormalize_values(X @ c, data['preco_stats'])
+    estimativa = mq.desnormalize_test_values(matriz_X @ c, data[f"{variavel_alvo}_stats"])
+
+    if entrada_escalar:
+        return float(estimativa[0])
+    return estimativa

@@ -10,9 +10,7 @@ import minimos_quadrados as mq
 
 from preco_de_mercado import (
     DATA_DIR,
-    desnormalize_values,
-    get_dolphin_normalizado,
-    get_onix_normalizado,
+    estima_valor,
     list_csv_files,
     normalize_values,
 )
@@ -83,22 +81,17 @@ class CalculationCache:
 
             try:
                 matrix, vector, coefficients = mq.solucao_sistema(
-                    ano, km, preco, grau
+                    [ano, km], preco, grau
                 )
             except np.linalg.LinAlgError:
                 return None
 
-            columns = [
-                (ano ** (d - j)) * (km ** j)
-                for d in range(grau + 1)
-                for j in range(d + 1)
-            ]
-            x_polynomial = np.column_stack(columns)
+            x_polynomial = mq.montar_matriz_X([ano, km], grau)
             estimated_normalized = x_polynomial @ coefficients
 
             price_stats = normalized["preco_stats"]
-            real_price = desnormalize_values(preco, price_stats)
-            estimated_price = desnormalize_values(
+            real_price = mq.desnormalize_test_values(preco, price_stats)
+            estimated_price = mq.desnormalize_test_values(
                 estimated_normalized,
                 price_stats,
             )
@@ -148,7 +141,7 @@ class CalculationCache:
                 for km_exponent in range(degree + 1)
             ]
             design = np.column_stack(columns)
-            real_price = desnormalize_values(preco, normalized["preco_stats"])
+            real_price = mq.desnormalize_test_values(preco, normalized["preco_stats"])
             reqm_values = []
 
             for degree in range(31):
@@ -158,7 +151,7 @@ class CalculationCache:
                     preco,
                     rcond=None,
                 )[0]
-                estimated_price = desnormalize_values(
+                estimated_price = mq.desnormalize_test_values(
                     design[:, :feature_count] @ coefficients,
                     normalized["preco_stats"],
                 )
@@ -217,7 +210,7 @@ def to_json_compatible(normalized_data):
 def dados():
     normalized = calculation_cache.get_normalized("onix.csv")
     if normalized is None:
-        normalized = get_onix_normalizado()
+        normalized = normalize_values("onix_bruto.csv", ["ano", "preco", "km"])
     return jsonify(to_json_compatible(normalized))
 
 
@@ -225,7 +218,7 @@ def dados():
 def dados_dolphin():
     normalized = calculation_cache.get_normalized("dolphin_mini.csv")
     if normalized is None:
-        normalized = get_dolphin_normalizado()
+        normalized = normalize_values("dolphin_mini_bruto.csv", ["ano", "preco", "km"])
     return jsonify(to_json_compatible(normalized))
 
 
@@ -437,13 +430,6 @@ def estimar_preco_csv(csv_name):
     if normalized is None:
         return jsonify({"error": "Nao foi possivel normalizar os dados."}), 422
 
-    ano_stats = normalized["ano_stats"]
-    km_stats = normalized["km_stats"]
-    price_stats = normalized["preco_stats"]
-
-    ano_normalized = (ano - ano_stats[2]) / (ano_stats[1] - ano_stats[0])
-    km_normalized = (km - km_stats[2]) / (km_stats[1] - km_stats[0])
-
     if grau not in SUPPORTED_MODEL_DEGREES:
         return jsonify({"error": "O grau deve ser um inteiro entre 0 e 3."}), 400
 
@@ -452,14 +438,11 @@ def estimar_preco_csv(csv_name):
         return jsonify({"error": "Nao foi possivel calcular o modelo."}), 422
     _, _, coefficients = models["polynomial"]
 
-    terms = [
-        (ano_normalized ** (d - j)) * (km_normalized ** j)
-        for d in range(grau + 1)
-        for j in range(d + 1)
-    ]
-    polynomial_price = desnormalize_values(
-        np.array(terms, dtype=float) @ coefficients,
-        price_stats,
+    polynomial_price = estima_valor(
+        {"ano": ano, "km": km},
+        grau,
+        normalized,
+        coefficients,
     )
 
     return jsonify({
