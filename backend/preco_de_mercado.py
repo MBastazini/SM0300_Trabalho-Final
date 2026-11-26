@@ -52,19 +52,19 @@ def normalize_values(csv_file, parameter_list):
 #Funcao pra testar a API
 def get_onix_normalizado():
     """
-    Retorna os valores normalizados do arquivo 'onix_bruto.csv' para os parâmetros 'ano', 'preco' e 'km'.
+    Retorna os valores normalizados do arquivo 'onix.csv' para os parâmetros 'ano', 'preco' e 'km'.
     """
-    return normalize_values('onix_bruto.csv', ['ano', 'preco', 'km'])
+    return normalize_values('onix.csv', ['ano', 'preco', 'km'])
 
 def get_dolphin_normalizado():
     """
-    Retorna os valores normalizados do arquivo 'dolphin_mini_bruto.csv' para os parâmetros 'ano', 'preco' e 'km'.
+    Retorna os valores normalizados do arquivo 'dolphin_mini.csv' para os parâmetros 'ano', 'preco' e 'km'.
     """
-    return normalize_values('dolphin_mini_bruto.csv', ['ano', 'preco', 'km'])
+    return normalize_values('dolphin_mini.csv', ['ano', 'preco', 'km'])
 
 def normalize_test_values(ano, km, data):
     """
-    Normaliza os valores de ano e km fornecidos com base nos valores normalizados do arquivo 'onix_bruto.csv'.
+    Normaliza os valores de ano e km fornecidos com base nos valores normalizados do arquivo 'onix.csv'.
     Retorna os valores normalizados de ano e km.
     """
     

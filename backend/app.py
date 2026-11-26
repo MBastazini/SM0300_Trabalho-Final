@@ -292,6 +292,12 @@ def upload_csv():
         return jsonify({"error": "O CSV nao possui linhas de dados."}), 400
 
     file_path = DATA_DIR / filename
+    # Não sobrescreve os dados existentes (ex.: subir outro 'onix.csv' apagaria o original)
+    if file_path.exists():
+        return jsonify({
+            "error": f"Ja existe um arquivo chamado {filename}. Renomeie o CSV e tente de novo."
+        }), 409
+
     file_path.write_text(text, encoding="utf-8")
     calculation_cache.clear()
 

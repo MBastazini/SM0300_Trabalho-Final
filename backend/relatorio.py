@@ -27,7 +27,8 @@ from preco_de_mercado import desnormalize_values, estima_preco
 
 RAIZ = Path(__file__).resolve().parent.parent
 PASTA_GRAFICOS = RAIZ / "graficos"
-MODELOS = [('lin', 'linear'), ('quad', 'quadrático')]
+# (grau do polinômio, sufixo dos arquivos de gráfico, nome do modelo)
+MODELOS = [(1, 'lin', 'linear'), (2, 'quad', 'quadrático')]
 
 
 def moeda(valor):
@@ -79,20 +80,22 @@ def normaliza_matriz(dados):
     return data
 
 
-def matriz_planejamento(A, K, tipo):
-    """Matriz X do ajuste: [1 | A | K] no linear e [1 | A | K | A² | AK | K²] no quadrático."""
-    if tipo == 'lin':
-        return np.column_stack((np.ones_like(A), A, K))
-    return np.column_stack((np.ones_like(A), A, K, A**2, A * K, K**2))
+def matriz_planejamento(A, K, grau):
+    """
+    Matriz X do ajuste de grau n, na mesma ordem de mq.solucao_sistema:
+    [1 | A | K] no grau 1, [1 | A | K | A² | AK | K²] no grau 2, e assim por diante.
+    """
+    colunas = [(A ** (d - j)) * (K ** j) for d in range(grau + 1) for j in range(d + 1)]
+    return np.column_stack(colunas)
 
 
-def depreciacao(ano, km, c, tipo, data):
+def depreciacao(ano, km, c, grau, data):
     """Queda de preço (R$ e %) do carro (ano, km) com +8000 km, +10000 km e 1 ano a mais de idade."""
-    atual = estima_preco(ano, km, c, tipo, data)
+    atual = estima_preco(ano, km, c, grau, data)
     quedas = {
-        '+8000 km': atual - estima_preco(ano, km + 8000, c, tipo, data),
-        '+10000 km': atual - estima_preco(ano, km + 10000, c, tipo, data),
-        '1 ano mais velho': atual - estima_preco(ano - 1, km, c, tipo, data),
+        '+8000 km': atual - estima_preco(ano, km + 8000, c, grau, data),
+        '+10000 km': atual - estima_preco(ano, km + 10000, c, grau, data),
+        '1 ano mais velho': atual - estima_preco(ano - 1, km, c, grau, data),
     }
     return atual, {nome: (queda, 100 * queda / atual) for nome, queda in quedas.items()}
 
@@ -102,7 +105,7 @@ def relatorio(dados, nome='carro', ano_carro=None, km_carro=None, pasta=PASTA_GR
     Roda os itens 2 a 7 do projeto para a matriz `dados` (colunas: ano, km, preco).
 
     ano_carro, km_carro -> carro avaliado nos itens 6 e 7. Se omitidos, usa o carro médio da amostra.
-    Retorna um dicionário com os resultados de cada modelo ('lin' e 'quad').
+    Retorna um dicionário com os resultados de cada modelo, indexado pelo grau (1 e 2).
     """
     dados = np.asarray(dados, dtype=float)
     pasta = Path(pasta)
@@ -141,13 +144,13 @@ def relatorio(dados, nome='carro', ano_carro=None, km_carro=None, pasta=PASTA_GR
         descricao_carro = f"ano-modelo {ano_formatado(ano_carro)} com {inteiro(km_carro)} km"
 
     resultados = {}
-    for tipo, nome_modelo in MODELOS:
+    for grau, sufixo, nome_modelo in MODELOS:
         print("\n" + "-" * largura)
         print(f"{'MODELO ' + nome_modelo.upper():^72}")
         print("-" * largura)
 
         # PASSO 3: sistema linear (equações normais) e solução
-        M, b, c = mq.solucao_sistema(data['ano'], data['km'], data['preco'], tipo)
+        M, b, c = mq.solucao_sistema(data['ano'], data['km'], data['preco'], grau)
         print("\nPASSO 3 - SISTEMA DE EQUAÇÕES NORMAIS")
         print("  (X^T X) c = X^T y")
         print("  M = X^T X")
@@ -156,11 +159,11 @@ def relatorio(dados, nome='carro', ano_carro=None, km_carro=None, pasta=PASTA_GR
         print(f"  {vetor_matriz(b)}")
         print(f"\n  Coeficientes c")
         print(f"  {vetor_matriz(c)}")
-        mq.plotar_modelo_3d(data['ano'], data['km'], data['preco'], c, tipo, titulo=nome,
-                            arquivo=pasta / f"{prefixo}_superficie_{tipo}.png")
+        mq.plotar_modelo_3d(data['ano'], data['km'], data['preco'], c, grau, titulo=nome,
+                            arquivo=pasta / f"{prefixo}_superficie_{sufixo}.png")
 
         # Preço estimado de cada anúncio, em reais
-        X = matriz_planejamento(data['ano'], data['km'], tipo)
+        X = matriz_planejamento(data['ano'], data['km'], grau)
         estimado = desnormalize_values(X @ c, data['preco_stats'])
 
         # PASSO 4: REQM
@@ -183,10 +186,10 @@ def relatorio(dados, nome='carro', ano_carro=None, km_carro=None, pasta=PASTA_GR
         print(f"    Estimado:  {moeda(estimado[i])}")
         print(f"    Ágio:      {percentual(agio[i])}")
         mq.plotar_agio(agio, f'{nome} - modelo {nome_modelo}',
-                       arquivo=pasta / f"{prefixo}_agio_{tipo}.png")
+                       arquivo=pasta / f"{prefixo}_agio_{sufixo}.png")
 
         # PASSOS 6 e 7: preço do carro escolhido e depreciação
-        atual, quedas = depreciacao(ano_carro, km_carro, c, tipo, data)
+        atual, quedas = depreciacao(ano_carro, km_carro, c, grau, data)
         print("\nPASSO 6 - ESTIMATIVA DO VEÍCULO")
         print(f"  {descricao_carro}")
         print(f"  Preço estimado: {moeda(atual)}")
@@ -194,13 +197,14 @@ def relatorio(dados, nome='carro', ano_carro=None, km_carro=None, pasta=PASTA_GR
         for evento, (queda, pct) in quedas.items():
             print(f"  {evento:<17} queda de {moeda(queda):>16}  ({percentual(pct)})")
 
-        resultados[tipo] = {'c': c, 'M': M, 'b': b, 'reqm': reqm, 'agio': agio,
+        resultados[grau] = {'c': c, 'M': M, 'b': b, 'reqm': reqm, 'agio': agio,
                             'estimado': estimado, 'preco_atual': atual, 'depreciacao': quedas}
 
     melhor = min(resultados, key=lambda t: resultados[t]['reqm'])
     print("\n" + "=" * largura)
     print("RESUMO")
-    print(f"  Menor REQM: modelo {dict(MODELOS)[melhor]}")
+    nomes = {g: nome_modelo for g, _, nome_modelo in MODELOS}
+    print(f"  Menor REQM: modelo {nomes[melhor]}")
     print(f"  Gráficos salvos em: {pasta}")
     print("=" * largura)
 
@@ -221,8 +225,8 @@ def compara_depreciacao(carros):
     print("Modelo linear - carro médio de cada amostra")
     print("=" * largura)
     for nome, res in carros:
-        data, c = res['data'], res['lin']['c']
-        _, quedas = depreciacao(data['ano_stats'][2], data['km_stats'][2], c, 'lin', data)
+        data, c = res['data'], res[1]['c']
+        _, quedas = depreciacao(data['ano_stats'][2], data['km_stats'][2], c, 1, data)
         km_queda, km_pct = quedas['+10000 km']
         ano_queda, ano_pct = quedas['1 ano mais velho']
         print(f"\n  {nome}")
@@ -240,6 +244,6 @@ if __name__ == "__main__":
         relatorio(carrega_csv(caminho), caminho.stem, ano, km)
     else:
         # Projeto completo: Onix (carro do Bob) e Dolphin Mini (veículo elétrico)
-        onix = relatorio(carrega_csv(RAIZ / "dados" / "onix_bruto.csv"), 'Onix', ano_carro=2022, km_carro=48000)
-        dolphin = relatorio(carrega_csv(RAIZ / "dados" / "dolphin_mini_bruto.csv"), 'Dolphin Mini')
+        onix = relatorio(carrega_csv(RAIZ / "dados" / "onix.csv"), 'Onix', ano_carro=2022, km_carro=48000)
+        dolphin = relatorio(carrega_csv(RAIZ / "dados" / "dolphin_mini.csv"), 'Dolphin Mini')
         compara_depreciacao([('Onix', onix), ('Dolphin Mini', dolphin)])

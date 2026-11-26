@@ -6,12 +6,12 @@ print("Passo 2 -> Normalizando os valores do onix...")
 onix_data = preco_de_mercado.get_onix_normalizado()
 
 print("Passo 3 -> Estimando os coeficientes do modelo (linear e quadratico)")
-[M_lin, b_lin, c_lin] = mq.solucao_sistema(onix_data['ano'], onix_data['km'], onix_data['preco'], 'lin')
+[M_lin, b_lin, c_lin] = mq.solucao_sistema(onix_data['ano'], onix_data['km'], onix_data['preco'], 1)
 print(f"Coeficientes do modelo linear: {M_lin}, {b_lin}, {c_lin}")
-mq.plotar_modelo_3d(onix_data['ano'], onix_data['km'], onix_data['preco'], c_lin, 'lin')
-[M_quad, b_quad, c_quad] = mq.solucao_sistema(onix_data['ano'], onix_data['km'], onix_data['preco'], 'quad')
+mq.plotar_modelo_3d(onix_data['ano'], onix_data['km'], onix_data['preco'], c_lin, 1)
+[M_quad, b_quad, c_quad] = mq.solucao_sistema(onix_data['ano'], onix_data['km'], onix_data['preco'], 2)
 print(f"Coeficientes do modelo quadratico: {M_quad}, {b_quad}, {c_quad}")
-mq.plotar_modelo_3d(onix_data['ano'], onix_data['km'], onix_data['preco'], c_quad, 'quad')
+mq.plotar_modelo_3d(onix_data['ano'], onix_data['km'], onix_data['preco'], c_quad, 2)
 
 print("Determinando os valores estimados...")
 
@@ -62,25 +62,25 @@ print("Passo 6 -> Estimando o preço do carro do Bob")
 ano_test = 2022
 km_test = 48000
 
-preco_estimado_test_lin = preco_de_mercado.estima_preco(ano_test, km_test, c_lin, 'lin', onix_data)
-preco_estimado_test_quad = preco_de_mercado.estima_preco(ano_test, km_test, c_quad, 'quad', onix_data)
+preco_estimado_test_lin = preco_de_mercado.estima_preco(ano_test, km_test, c_lin, 1, onix_data)
+preco_estimado_test_quad = preco_de_mercado.estima_preco(ano_test, km_test, c_quad, 2, onix_data)
 
 print(f"Preço estimado para o carro com ano {ano_test} e km {km_test} (modelo linear): R$ {preco_estimado_test_lin:.2f}")
 print(f"Preço estimado para o carro com ano {ano_test} e km {km_test} (modelo quadrático): R$ {preco_estimado_test_quad:.2f}")
 
 print("Passo 7 -> Depreciação")
-for tipo, c in [('lin', c_lin), ('quad', c_quad)]:
-    atual = preco_de_mercado.estima_preco(2022, 48000, c, tipo, onix_data)
+for grau, c in [(1, c_lin), (2, c_quad)]:
+    atual = preco_de_mercado.estima_preco(2022, 48000, c, grau, onix_data)
 
-    dep_8000 = atual - preco_de_mercado.estima_preco(2022, 56000, c, tipo, onix_data)
-    dep_10000 = atual - preco_de_mercado.estima_preco(2022, 58000, c, tipo, onix_data)
-    dep_1ano = atual - preco_de_mercado.estima_preco(2021, 48000, c, tipo, onix_data)
-    print(f"[{tipo}] +8000 km: R$ {dep_8000:.2f} ({100*dep_8000/atual:.2f}%)")
-    print(f"[{tipo}] +10000 km: R$ {dep_10000:.2f} ({100*dep_10000/atual:.2f}%) | 1 ano mais velho: R$ {dep_1ano:.2f} ({100*dep_1ano/atual:.2f}%)")
+    dep_8000 = atual - preco_de_mercado.estima_preco(2022, 56000, c, grau, onix_data)
+    dep_10000 = atual - preco_de_mercado.estima_preco(2022, 58000, c, grau, onix_data)
+    dep_1ano = atual - preco_de_mercado.estima_preco(2021, 48000, c, grau, onix_data)
+    print(f"[grau {grau}] +8000 km: R$ {dep_8000:.2f} ({100*dep_8000/atual:.2f}%)")
+    print(f"[grau {grau}] +10000 km: R$ {dep_10000:.2f} ({100*dep_10000/atual:.2f}%) | 1 ano mais velho: R$ {dep_1ano:.2f} ({100*dep_1ano/atual:.2f}%)")
 
 print("Passo 9 -> Veículo elétrico (Dolphin Mini)")
 dolphin_data = preco_de_mercado.get_dolphin_normalizado()
-[M_dol, b_dol, c_dol] = mq.solucao_sistema(dolphin_data['ano'], dolphin_data['km'], dolphin_data['preco'], 'lin')
+[M_dol, b_dol, c_dol] = mq.solucao_sistema(dolphin_data['ano'], dolphin_data['km'], dolphin_data['preco'], 1)
 print(f"Coeficientes do Dolphin (linear): {c_dol}")
 
 X_dol = np.column_stack((np.ones_like(dolphin_data['ano']), dolphin_data['ano'], dolphin_data['km']))
@@ -95,9 +95,9 @@ print(f"REQM Dolphin: R$ {reqm_dol:.2f}")
 for nome, data, c in [('Onix', onix_data, c_lin), ('Dolphin Mini', dolphin_data, c_dol)]:
     ano_ref = data['ano_stats'][2]
     km_ref = data['km_stats'][2]
-    atual = preco_de_mercado.estima_preco(ano_ref, km_ref, c, 'lin', data)
+    atual = preco_de_mercado.estima_preco(ano_ref, km_ref, c, 1, data)
 
-    dep_10000 = atual - preco_de_mercado.estima_preco(ano_ref, km_ref + 10000, c, 'lin', data)
-    dep_1ano = atual - preco_de_mercado.estima_preco(ano_ref - 1, km_ref, c, 'lin', data)
+    dep_10000 = atual - preco_de_mercado.estima_preco(ano_ref, km_ref + 10000, c, 1, data)
+    dep_1ano = atual - preco_de_mercado.estima_preco(ano_ref - 1, km_ref, c, 1, data)
 
     print(f"[{nome}] +10000 km: R$ {dep_10000:.2f} ({100*dep_10000/atual:.2f}%) | 1 ano mais velho: R$ {dep_1ano:.2f} ({100*dep_1ano/atual:.2f}%)")

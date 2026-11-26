@@ -89,6 +89,16 @@ class BackendTest(unittest.TestCase):
 
             self.assertEqual(response.status_code, 201)
             self.assertIn(csv_name, list_csv_files())
+
+            # Subir de novo com o mesmo nome não pode sobrescrever o arquivo
+            repetido = (BytesIO(b"ano,km,preco\n2020,1,1\n"), csv_name)
+            response = self.client.post(
+                "/api/dados/upload",
+                data={"file": repetido},
+                content_type="multipart/form-data",
+            )
+            self.assertEqual(response.status_code, 409)
+            self.assertIn("90000", file_path.read_text(encoding="utf-8"))
         finally:
             if file_path.is_file():
                 file_path.unlink()
