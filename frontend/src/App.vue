@@ -13,8 +13,8 @@ const normalizedData = ref(null)
 const modelData = ref(null)
 const surfaceChart = ref(null)
 const agioChart = ref(null)
-const showLinearSurface = ref(true)
-const showQuadraticSurface = ref(true)
+const reqmChart = ref(null)
+const availablePolynomialDegrees = [0, 1, 2, 3]
 const estimateYear = ref('')
 const estimateKm = ref('')
 const estimateResult = ref(null)
@@ -22,6 +22,8 @@ const estimateComparisons = ref([])
 const isEstimating = ref(false)
 const csvFileInput = ref(null)
 const isUploadingCsv = ref(false)
+const polynomialDegree = ref(2)
+const showPolynomialSurface = ref(true)
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -89,23 +91,27 @@ async function uploadCsv(event) {
 
 async function calculateSelectedCsv() {
   if (!selectedCsv.value) return
+  if (!availablePolynomialDegrees.includes(polynomialDegree.value)) {
+    errorMessage.value = 'Selecione um grau entre zero e três.'
+    return
+  }
 
   isLoading.value = true
   errorMessage.value = ''
   normalizedData.value = null
   modelData.value = null
-  showLinearSurface.value = true
-  showQuadraticSurface.value = true
+  showPolynomialSurface.value = true
   estimateResult.value = null
   estimateComparisons.value = []
   if (surfaceChart.value) Plotly.purge(surfaceChart.value)
   if (agioChart.value) Plotly.purge(agioChart.value)
+  if (reqmChart.value) Plotly.purge(reqmChart.value)
 
   try {
     const [dataResponse, normalizationResponse, modelsResponse] = await Promise.all([
       fetch(`/api/dados/${encodeURIComponent(selectedCsv.value)}`),
       fetch(`/api/funcoes/normaliza/${encodeURIComponent(selectedCsv.value)}`),
-      fetch(`/api/funcoes/modelos/${encodeURIComponent(selectedCsv.value)}`),
+      fetch(`/api/funcoes/modelos/${encodeURIComponent(selectedCsv.value)}?grau=${polynomialDegree.value}`),
     ])
 
     if (!dataResponse.ok) throw new Error(`HTTP ${dataResponse.status}`)
@@ -118,15 +124,16 @@ async function calculateSelectedCsv() {
     rows.value = (data.rows ?? [])
       .map((row, index) => ({
         ...row,
-        agioQuadratico: models.quadratic.agio[index] ?? 0,
+        agioPolinomial: models.polynomial.agio[index] ?? 0,
       }))
-      .sort((left, right) => left.agioQuadratico - right.agioQuadratico)
+      .sort((left, right) => left.agioPolinomial - right.agioPolinomial)
     selectedName.value = data.csv_file ?? selectedCsv.value
     normalizedData.value = normalizationData.normalized
     modelData.value = models
     await nextTick()
     renderSurfaceChart()
     renderAgioChart()
+    renderReqmChart()
   } catch (error) {
     rows.value = []
     normalizedData.value = null
@@ -218,6 +225,47 @@ function formatAgio(value) {
   return `${Number(value) >= 0 ? '+' : ''}${Number(value).toFixed(1).replace('.', ',')}%`
 }
 
+function renderReqmChart() {
+  if (!reqmChart.value || !modelData.value?.reqm_curve) return
+
+  const { degrees, values } = modelData.value.reqm_curve
+  Plotly.react(
+    reqmChart.value,
+    [{
+      type: 'scatter',
+      mode: 'lines+markers',
+      name: 'REQM',
+      x: degrees,
+      y: values,
+      line: { color: '#7c3aed', width: 2 },
+      marker: { color: '#7c3aed', size: 6 },
+      hovertemplate: 'Grau %{x}<br>REQM: R$ %{y:,.2f}<extra></extra>',
+    }],
+    {
+      margin: { l: 90, r: 24, b: 55, t: 35 },
+      height: 380,
+      paper_bgcolor: '#ffffff',
+      plot_bgcolor: '#ffffff',
+      title: {
+        text: 'Raiz do erro quadrático médio por grau do polinômio',
+        font: { size: 15, color: '#0f172a' },
+      },
+      xaxis: {
+        title: 'Grau do polinômio (n)',
+        range: [0, 30],
+        dtick: 2,
+        tick0: 0,
+      },
+      yaxis: {
+        title: 'REQM (R$)',
+        rangemode: 'tozero',
+        separatethousands: true,
+      },
+    },
+    { responsive: true, displaylogo: false },
+  )
+}
+
 async function estimateVehiclePrice() {
   const year = Number(estimateYear.value)
   const km = Number(estimateKm.value)
@@ -236,7 +284,7 @@ async function estimateVehiclePrice() {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ano: year, km }),
+        body: JSON.stringify({ ano: year, km, grau: polynomialDegree.value }),
       },
     )
 
@@ -272,28 +320,43 @@ function removeEstimate(index) {
 
 function updateSurfaceVisibility() {
   if (!surfaceChart.value) return
-
-  Plotly.restyle(surfaceChart.value, { visible: showLinearSurface.value }, [1])
-  Plotly.restyle(surfaceChart.value, { visible: showQuadraticSurface.value }, [2])
+  Plotly.restyle(surfaceChart.value, { visible: showPolynomialSurface.value }, [1])
 }
 
-function linearGrid(value) {
+function polynomialGrid(value) {
   const ano = value.ano
   const km = value.km
-  const coefficients = modelData.value.linear.coefficients
-  return coefficients[0] + coefficients[1] * ano + coefficients[2] * km
+  const coefficients = modelData.value.polynomial.coefficients
+  let result = 0
+  let index = 0
+
+  for (let degree = 0; degree <= modelData.value.degree; degree += 1) {
+    for (let kmExponent = 0; kmExponent <= degree; kmExponent += 1) {
+      const anoExponent = degree - kmExponent
+      result += (coefficients[index++] ?? 0)
+        * (ano ** anoExponent)
+        * (km ** kmExponent)
+    }
+  }
+  return result
 }
 
-function quadraticGrid(value) {
-  const ano = value.ano
-  const km = value.km
-  const coefficients = modelData.value.quadratic.coefficients
-  return coefficients[0]
-    + coefficients[1] * ano
-    + coefficients[2] * km
-    + coefficients[3] * ano * ano
-    + coefficients[4] * ano * km
-    + coefficients[5] * km * km
+function polynomialFormula() {
+  if (!modelData.value) return 'p̂(A, K)'
+  const terms = []
+  let index = 0
+
+  for (let degree = 0; degree <= modelData.value.degree; degree += 1) {
+    for (let kmExponent = 0; kmExponent <= degree; kmExponent += 1) {
+      const anoExponent = degree - kmExponent
+      let term = `c${index}`
+      if (anoExponent > 0) term += `A${anoExponent > 1 ? '^' + anoExponent : ''}`
+      if (kmExponent > 0) term += `K${kmExponent > 1 ? '^' + kmExponent : ''}`
+      terms.push(term)
+      index += 1
+    }
+  }
+  return `p̂(A, K) = ${terms.join(' + ')}`
 }
 
 function renderSurfaceChart() {
@@ -318,11 +381,8 @@ function renderSurfaceChart() {
     (_, index) => kmMin + (index / 23) * (kmMax - kmMin),
   )
 
-  const linearSurface = kmGrid.map((km) =>
-    anoGrid.map((ano) => linearGrid({ ano, km })),
-  )
-  const quadraticSurface = kmGrid.map((km) =>
-    anoGrid.map((ano) => quadraticGrid({ ano, km })),
+  const polynomialSurface = kmGrid.map((km) =>
+    anoGrid.map((ano) => polynomialGrid({ ano, km })),
   )
 
   const scatterTrace = {
@@ -340,31 +400,21 @@ function renderSurfaceChart() {
     },
   }
 
-  const linearTrace = {
+  const polynomialTrace = {
     type: 'surface',
-    name: 'Modelo linear',
+    name: `Modelo polinomial grau ${modelData.value.degree}`,
     x: anoGrid,
     y: kmGrid,
-    z: linearSurface,
-    colorscale: 'Blues',
-    opacity: 0.72,
-    showscale: false,
-  }
-
-  const quadraticTrace = {
-    type: 'surface',
-    name: 'Modelo quadratico',
-    x: anoGrid,
-    y: kmGrid,
-    z: quadraticSurface,
+    z: polynomialSurface,
     colorscale: 'Teal',
     opacity: 0.58,
     showscale: false,
+    visible: showPolynomialSurface.value,
   }
 
   Plotly.react(
     surfaceChart.value,
-    [scatterTrace, linearTrace, quadraticTrace],
+    [scatterTrace, polynomialTrace],
     {
       margin: { l: 0, r: 0, b: 0, t: 20 },
       height: 520,
@@ -387,7 +437,7 @@ function renderSurfaceChart() {
 function renderAgioChart() {
   if (!agioChart.value || !modelData.value) return
 
-  const agioValues = modelData.value.quadratic.agio.map(Number)
+  const agioValues = modelData.value.polynomial.agio.map(Number)
   if (!agioValues.length) return
 
   const ordered = agioValues
@@ -420,7 +470,7 @@ function renderAgioChart() {
       plot_bgcolor: '#ffffff',
       bargap: 0.18,
       title: {
-        text: 'Distribuição do ágio - modelo quadrático',
+        text: `Distribuição do ágio - modelo grau ${modelData.value.degree}`,
         font: { size: 15, color: '#0f172a' },
       },
       xaxis: {
@@ -536,6 +586,22 @@ onMounted(fetchCsvFiles)
             </select>
           </label>
 
+          <label class="select-field" for="polynomial-degree">
+            <span>Grau do polinômio</span>
+            <select
+              id="polynomial-degree"
+              v-model.number="polynomialDegree"
+            >
+              <option
+                v-for="degree in availablePolynomialDegrees"
+                :key="degree"
+                :value="degree"
+              >
+                Grau {{ degree }}
+              </option>
+            </select>
+          </label>
+
           <input
             ref="csvFileInput"
             class="csv-file-input"
@@ -643,65 +709,36 @@ onMounted(fetchCsvFiles)
             </div>
           <p class="process-description">
             Os coeficientes são obtidos pelas equações normais XᵀXc = Xᵀp,
-            resolvendo o sistema linear para cada modelo.
+            resolvendo o sistema normal para o grau selecionado.
           </p>
 
           <div class="model-grid">
             <article class="model-card">
               <div class="model-heading">
-                <span class="model-badge">Modelo 1</span>
-                <h3>Aproximação linear</h3>
+                <span class="model-badge">Modelo</span>
+                <h3>Aproximação polinomial grau {{ modelData.degree }}</h3>
               </div>
 
               <div class="formula-block">
                 <span class="formula-label">Modelo</span>
-                <p>p̂(A, K) = c₀ + c₁A + c₂K</p>
+                <p>{{ polynomialFormula() }}</p>
               </div>
 
               <div class="formula-block">
                 <span class="formula-label">Equação normal</span>
-                <p>(X<sub>lin</sub><sup>T</sup>X<sub>lin</sub>)c<sub>lin</sub> = X<sub>lin</sub><sup>T</sup>P</p>
-              </div>
-
-              <div class="coefficient-list">
-                <span v-for="(coefficient, index) in modelData.linear.coefficients" :key="index">
-                  <small>c{{ index }}</small>
-                  {{ formatCoefficient(coefficient) }}
-                </span>
-              </div>
-
-              <div class="reqm-result">
-                <span>Erro REMQ</span>
-                <strong>{{ formatReqm(modelData.linear.reqm) }}</strong>
-              </div>
-            </article>
-
-            <article class="model-card">
-              <div class="model-heading">
-                <span class="model-badge quadratic-badge">Modelo 2</span>
-                <h3>Aproximação quadrática</h3>
-              </div>
-
-              <div class="formula-block">
-                <span class="formula-label">Modelo</span>
-                <p>p̂(A, K) = c₀ + c₁A + c₂K + c₃A² + c₄AK + c₅K²</p>
-              </div>
-
-              <div class="formula-block">
-                <span class="formula-label">Equação normal</span>
-                <p>(X<sub>quad</sub><sup>T</sup>X<sub>quad</sub>)c<sub>quad</sub> = X<sub>quad</sub><sup>T</sup>P</p>
+                <p>(X<sup>T</sup>X)c = X<sup>T</sup>P</p>
               </div>
 
               <div class="coefficient-list coefficient-list-large">
-                <span v-for="(coefficient, index) in modelData.quadratic.coefficients" :key="index">
+                <span v-for="(coefficient, index) in modelData.polynomial.coefficients" :key="index">
                   <small>c{{ index }}</small>
                   {{ formatCoefficient(coefficient) }}
                 </span>
               </div>
 
               <div class="reqm-result quadratic-reqm">
-                <span>Erro REMQ</span>
-                <strong>{{ formatReqm(modelData.quadratic.reqm) }}</strong>
+                <span>Raiz do erro quadrático médio (REQM)</span>
+                <strong>{{ formatReqm(modelData.polynomial.reqm) }}</strong>
               </div>
             </article>
           </div>
@@ -717,23 +754,13 @@ onMounted(fetchCsvFiles)
             <div class="surface-controls" aria-label="Controle das superficies">
               <button
                 type="button"
-                class="surface-toggle linear-toggle"
-                :class="{ active: showLinearSurface }"
-                :aria-pressed="showLinearSurface"
-                @click="showLinearSurface = !showLinearSurface; updateSurfaceVisibility()"
-              >
-                <span aria-hidden="true"></span>
-                Plano linear
-              </button>
-              <button
-                type="button"
                 class="surface-toggle quadratic-toggle"
-                :class="{ active: showQuadraticSurface }"
-                :aria-pressed="showQuadraticSurface"
-                @click="showQuadraticSurface = !showQuadraticSurface; updateSurfaceVisibility()"
+                :class="{ active: showPolynomialSurface }"
+                :aria-pressed="showPolynomialSurface"
+                @click="showPolynomialSurface = !showPolynomialSurface; updateSurfaceVisibility()"
               >
                 <span aria-hidden="true"></span>
-                Curva quadrática
+                Superfície grau {{ modelData.degree }}
               </button>
             </div>
             <div ref="surfaceChart" class="surface-chart" aria-label="Grafico tridimensional dos modelos"></div>
@@ -755,7 +782,7 @@ onMounted(fetchCsvFiles)
           <div class="agio-chart-heading">
             <div>
               <p class="step-label">Histograma do ágio</p>
-              <h3>Ajuste quadrático</h3>
+              <h3>Ajuste polinomial grau {{ modelData.degree }}</h3>
             </div>
             <div class="agio-legend" aria-label="Legenda do histograma">
               <span><i class="legend-green"></i>Barganha</span>
@@ -763,7 +790,17 @@ onMounted(fetchCsvFiles)
               <span><i class="legend-red"></i>Acima do valor</span>
             </div>
           </div>
-          <div ref="agioChart" class="agio-chart" aria-label="Histograma do agio pelo ajuste quadratico"></div>
+          <div ref="agioChart" class="agio-chart" :aria-label="`Histograma do agio pelo ajuste grau ${modelData.degree}`"></div>
+        </article>
+
+        <article class="agio-chart-card reqm-chart-card">
+          <div class="agio-chart-heading">
+            <div>
+              <p class="step-label">Qualidade do ajuste</p>
+              <h3>Raiz do erro quadrático médio (REQM) — graus 0 a 30</h3>
+            </div>
+          </div>
+          <div ref="reqmChart" class="agio-chart" aria-label="Gráfico da raiz do erro quadrático médio dos polinômios de grau zero a trinta"></div>
         </article>
 
         <div class="table-wrap">
@@ -782,13 +819,13 @@ onMounted(fetchCsvFiles)
                 <td><span class="year-badge">{{ row.ano }}</span></td>
                 <td>{{ formatKm(row.km) }}</td>
                 <td class="price-cell">{{ formatCurrency(row.preco) }}</td>
-                <td class="agio-cell">{{ formatAgio(row.agioQuadratico) }}</td>
+                <td class="agio-cell">{{ formatAgio(row.agioPolinomial) }}</td>
                 <td>
                   <span
                     class="situation-badge"
-                    :class="vehicleSituationClass(row.agioQuadratico)"
+                    :class="vehicleSituationClass(row.agioPolinomial)"
                   >
-                    {{ vehicleSituation(row.agioQuadratico) }}
+                    {{ vehicleSituation(row.agioPolinomial) }}
                   </span>
                 </td>
               </tr>
@@ -849,12 +886,8 @@ onMounted(fetchCsvFiles)
 
           <div v-if="estimateResult" class="estimate-result">
             <article>
-              <span>Modelo linear</span>
-              <strong>{{ formatCurrency(estimateResult.linear) }}</strong>
-            </article>
-            <article class="quadratic-estimate">
-              <span>Modelo quadrático</span>
-              <strong>{{ formatCurrency(estimateResult.quadratic) }}</strong>
+              <span>Modelo polinomial grau {{ estimateResult.degree }}</span>
+              <strong>{{ formatCurrency(estimateResult.polynomial) }}</strong>
             </article>
 
             <button
@@ -881,8 +914,7 @@ onMounted(fetchCsvFiles)
                 <div class="comparison-data">
                   <strong>{{ estimate.ano }} · {{ formatKm(estimate.km) }}</strong>
                   <span>
-                    Linear {{ formatCurrency(estimate.linear) }} ·
-                    Quadrático {{ formatCurrency(estimate.quadratic) }}
+                    Grau {{ estimate.degree }} · {{ formatCurrency(estimate.polynomial) }}
                   </span>
                 </div>
                 <button

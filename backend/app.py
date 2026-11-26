@@ -20,6 +20,8 @@ from preco_de_mercado import (
 
 app = Flask(__name__)
 
+SUPPORTED_MODEL_DEGREES = (0, 1, 2, 3)
+
 
 class CalculationCache:
     """Guarda resultados calculados por CSV e invalida quando o arquivo muda."""
@@ -27,6 +29,7 @@ class CalculationCache:
     def __init__(self):
         self._normalized = {}
         self._models = {}
+        self._reqm_curves = {}
         self._lock = RLock()
 
     @staticmethod
@@ -51,17 +54,20 @@ class CalculationCache:
                 "signature": signature,
                 "value": normalized,
             }
-            self._models.pop(csv_name, None)
+            for key in [key for key in self._models if key[0] == csv_name]:
+                self._models.pop(key, None)
+            self._reqm_curves.pop(csv_name, None)
             return normalized
 
-    def get_models(self, csv_name):
+    def get_models(self, csv_name, grau=2):
         normalized = self.get_normalized(csv_name)
         if normalized is None:
             return None
 
         signature = self._file_signature(csv_name)
+        cache_key = (csv_name, grau)
         with self._lock:
-            cached = self._models.get(csv_name)
+            cached = self._models.get(cache_key)
             if cached is not None and cached["signature"] == signature:
                 return cached["value"]
 
@@ -72,71 +78,107 @@ class CalculationCache:
             if not (len(ano) == len(km) == len(preco)) or len(preco) == 0:
                 return None
 
-            matrix_linear, vector_linear, coefficients_linear = mq.solucao_sistema(
-                ano, km, preco, "lin"
-            )
-            matrix_quadratic, vector_quadratic, coefficients_quadratic = mq.solucao_sistema(
-                ano, km, preco, "quad"
-            )
+            if grau < 0:
+                return None
 
-            x_linear = np.column_stack((np.ones_like(ano), ano, km))
-            estimated_linear_normalized = x_linear @ coefficients_linear
+            try:
+                matrix, vector, coefficients = mq.solucao_sistema(
+                    ano, km, preco, grau
+                )
+            except np.linalg.LinAlgError:
+                return None
 
-            x_quadratic = np.column_stack((
-                np.ones_like(ano),
-                ano,
-                km,
-                ano ** 2,
-                ano * km,
-                km ** 2,
-            ))
-            estimated_quadratic_normalized = x_quadratic @ coefficients_quadratic
+            columns = [
+                (ano ** (d - j)) * (km ** j)
+                for d in range(grau + 1)
+                for j in range(d + 1)
+            ]
+            x_polynomial = np.column_stack(columns)
+            estimated_normalized = x_polynomial @ coefficients
 
             price_stats = normalized["preco_stats"]
             real_price = desnormalize_values(preco, price_stats)
-            estimated_linear_price = desnormalize_values(
-                estimated_linear_normalized,
-                price_stats,
-            )
-            estimated_quadratic_price = desnormalize_values(
-                estimated_quadratic_normalized,
+            estimated_price = desnormalize_values(
+                estimated_normalized,
                 price_stats,
             )
 
-            reqm_linear = float(mq.REQM(estimated_linear_price, real_price))
-            reqm_quadratic = float(mq.REQM(estimated_quadratic_price, real_price))
-            agio_linear = mq.agio_percentual(estimated_linear_price, real_price)
-            agio_quadratic = mq.agio_percentual(estimated_quadratic_price, real_price)
+            reqm = float(mq.REQM(estimated_price, real_price))
+            agio = mq.agio_percentual(estimated_price, real_price)
 
             models = {
                 "ano": ano,
                 "km": km,
                 "preco": preco,
-                "reqm_linear": reqm_linear,
-                "reqm_quadratic": reqm_quadratic,
-                "agio_linear": agio_linear,
-                "agio_quadratic": agio_quadratic,
-                "linear": (
-                    matrix_linear,
-                    vector_linear,
-                    coefficients_linear,
-                ),
-                "quadratic": (
-                    matrix_quadratic,
-                    vector_quadratic,
-                    coefficients_quadratic,
+                "degree": grau,
+                "reqm": reqm,
+                "agio": agio,
+                "polynomial": (
+                    matrix,
+                    vector,
+                    coefficients,
                 ),
             }
-            self._models[csv_name] = {
+            self._models[cache_key] = {
                 "signature": signature,
                 "value": models,
             }
             return models
 
+    def get_reqm_curve(self, csv_name):
+        normalized = self.get_normalized(csv_name)
+        if normalized is None:
+            return None
+
+        signature = self._file_signature(csv_name)
+        with self._lock:
+            cached = self._reqm_curves.get(csv_name)
+            if cached is not None and cached["signature"] == signature:
+                return cached["value"]
+
+            ano = np.asarray(normalized["ano"], dtype=float).reshape(-1)
+            km = np.asarray(normalized["km"], dtype=float).reshape(-1)
+            preco = np.asarray(normalized["preco"], dtype=float).reshape(-1)
+            if not (len(ano) == len(km) == len(preco)) or len(preco) == 0:
+                return None
+
+            columns = [
+                (ano ** (degree - km_exponent)) * (km ** km_exponent)
+                for degree in range(31)
+                for km_exponent in range(degree + 1)
+            ]
+            design = np.column_stack(columns)
+            real_price = desnormalize_values(preco, normalized["preco_stats"])
+            reqm_values = []
+
+            for degree in range(31):
+                feature_count = (degree + 1) * (degree + 2) // 2
+                coefficients = np.linalg.lstsq(
+                    design[:, :feature_count],
+                    preco,
+                    rcond=None,
+                )[0]
+                estimated_price = desnormalize_values(
+                    design[:, :feature_count] @ coefficients,
+                    normalized["preco_stats"],
+                )
+                reqm_values.append(float(mq.REQM(estimated_price, real_price)))
+
+            curve = {
+                "degrees": list(range(31)),
+                "values": reqm_values,
+            }
+            self._reqm_curves[csv_name] = {
+                "signature": signature,
+                "value": curve,
+            }
+            return curve
+
     def clear(self):
         with self._lock:
             self._normalized.clear()
             self._models.clear()
+            self._reqm_curves.clear()
 
 
 calculation_cache = CalculationCache()
@@ -326,39 +368,44 @@ def calcular_modelos_csv(csv_name):
     if DATA_DIR.resolve() not in file_path.parents or not file_path.is_file():
         return jsonify({"error": "Arquivo CSV nao encontrado."}), 404
 
-    models = calculation_cache.get_models(csv_name)
+    try:
+        grau = int(request.args.get("grau", 2))
+    except (TypeError, ValueError):
+        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 3."}), 400
+    if grau not in SUPPORTED_MODEL_DEGREES:
+        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 3."}), 400
+
+    models = calculation_cache.get_models(csv_name, grau)
     if models is None:
         normalized = calculation_cache.get_normalized(csv_name)
         if normalized is None:
             return jsonify({"error": "Nao foi possivel normalizar os dados do arquivo."}), 422
         return jsonify({"error": "Os dados normalizados possuem tamanhos invalidos."}), 422
 
+    reqm_curve = calculation_cache.get_reqm_curve(csv_name)
+    if reqm_curve is None:
+        return jsonify({"error": "Nao foi possivel calcular a REQM por grau."}), 422
+
     ano = models["ano"]
     km = models["km"]
     preco = models["preco"]
-    matrix_linear, vector_linear, coefficients_linear = models["linear"]
-    matrix_quadratic, vector_quadratic, coefficients_quadratic = models["quadratic"]
+    matrix, vector, coefficients = models["polynomial"]
 
     return jsonify({
         "csv_file": csv_name,
+        "degree": models["degree"],
+        "reqm_curve": reqm_curve,
         "points": {
             "ano": ano.tolist(),
             "km": km.tolist(),
             "preco": preco.tolist(),
         },
-        "linear": {
-            "coefficients": coefficients_linear.tolist(),
-            "normal_matrix": matrix_linear.tolist(),
-            "normal_vector": vector_linear.tolist(),
-            "reqm": models["reqm_linear"],
-            "agio": models["agio_linear"].tolist(),
-        },
-        "quadratic": {
-            "coefficients": coefficients_quadratic.tolist(),
-            "normal_matrix": matrix_quadratic.tolist(),
-            "normal_vector": vector_quadratic.tolist(),
-            "reqm": models["reqm_quadratic"],
-            "agio": models["agio_quadratic"].tolist(),
+        "polynomial": {
+            "coefficients": coefficients.tolist(),
+            "normal_matrix": matrix.tolist(),
+            "normal_vector": vector.tolist(),
+            "reqm": models["reqm"],
+            "agio": models["agio"].tolist(),
         },
     })
 
@@ -376,6 +423,10 @@ def estimar_preco_csv(csv_name):
         km = float(payload["km"])
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "Ano e quilometragem sao obrigatorios."}), 400
+    try:
+        grau = int(payload.get("grau", 2))
+    except (TypeError, ValueError):
+        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 3."}), 400
 
     if ano < 1886 or km < 0:
         return jsonify({
@@ -383,9 +434,8 @@ def estimar_preco_csv(csv_name):
         }), 400
 
     normalized = calculation_cache.get_normalized(csv_name)
-    models = calculation_cache.get_models(csv_name)
-    if normalized is None or models is None:
-        return jsonify({"error": "Nao foi possivel calcular os modelos."}), 422
+    if normalized is None:
+        return jsonify({"error": "Nao foi possivel normalizar os dados."}), 422
 
     ano_stats = normalized["ano_stats"]
     km_stats = normalized["km_stats"]
@@ -394,25 +444,21 @@ def estimar_preco_csv(csv_name):
     ano_normalized = (ano - ano_stats[2]) / (ano_stats[1] - ano_stats[0])
     km_normalized = (km - km_stats[2]) / (km_stats[1] - km_stats[0])
 
-    _, _, coefficients_linear = models["linear"]
-    _, _, coefficients_quadratic = models["quadratic"]
+    if grau not in SUPPORTED_MODEL_DEGREES:
+        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 3."}), 400
 
-    linear_vector = np.array([1, ano_normalized, km_normalized])
-    quadratic_vector = np.array([
-        1,
-        ano_normalized,
-        km_normalized,
-        ano_normalized ** 2,
-        ano_normalized * km_normalized,
-        km_normalized ** 2,
-    ])
+    models = calculation_cache.get_models(csv_name, grau)
+    if models is None:
+        return jsonify({"error": "Nao foi possivel calcular o modelo."}), 422
+    _, _, coefficients = models["polynomial"]
 
-    linear_price = desnormalize_values(
-        linear_vector @ coefficients_linear,
-        price_stats,
-    )
-    quadratic_price = desnormalize_values(
-        quadratic_vector @ coefficients_quadratic,
+    terms = [
+        (ano_normalized ** (d - j)) * (km_normalized ** j)
+        for d in range(grau + 1)
+        for j in range(d + 1)
+    ]
+    polynomial_price = desnormalize_values(
+        np.array(terms, dtype=float) @ coefficients,
         price_stats,
     )
 
@@ -420,8 +466,8 @@ def estimar_preco_csv(csv_name):
         "csv_file": csv_name,
         "ano": ano,
         "km": km,
-        "linear": float(linear_price),
-        "quadratic": float(quadratic_price),
+        "degree": grau,
+        "polynomial": float(polynomial_price),
     })
 
 

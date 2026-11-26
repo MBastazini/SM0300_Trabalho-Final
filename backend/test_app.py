@@ -1,5 +1,6 @@
 import unittest
 from io import BytesIO
+import math
 from pathlib import Path
 
 
@@ -41,6 +42,25 @@ class BackendTest(unittest.TestCase):
         self.assertEqual(models_response.status_code, 200)
         self.assertIs(first_normalized, second_normalized)
         self.assertIs(first_models, second_models)
+
+    def test_model_degree_limit_and_reqm_curve(self):
+        response = self.client.get("/api/funcoes/modelos/onix.csv?grau=4")
+        self.assertEqual(response.status_code, 400)
+        estimate_response = self.client.post(
+            "/api/funcoes/estima/onix.csv",
+            json={"ano": 2022, "km": 48000, "grau": 4},
+        )
+        self.assertEqual(estimate_response.status_code, 400)
+
+        response = self.client.get("/api/funcoes/modelos/onix.csv?grau=3")
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["degree"], 3)
+        self.assertEqual(len(payload["polynomial"]["coefficients"]), 10)
+        self.assertEqual(payload["reqm_curve"]["degrees"], list(range(31)))
+        self.assertEqual(len(payload["reqm_curve"]["values"]), 31)
+        self.assertTrue(all(math.isfinite(value) for value in payload["reqm_curve"]["values"]))
 
     def test_csv_upload_requires_expected_columns(self):
         upload = (BytesIO(b"ano,km\n2024,1000\n"),

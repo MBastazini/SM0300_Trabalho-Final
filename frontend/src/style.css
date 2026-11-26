@@ -108,7 +108,7 @@ select {
 
 .controls {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.55fr) auto auto;
   align-items: end;
   gap: 12px;
   margin-top: 20px;

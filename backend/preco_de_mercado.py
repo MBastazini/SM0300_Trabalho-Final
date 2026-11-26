@@ -86,11 +86,15 @@ def desnormalize_values(valor_normalizado, stats):
     """
     return stats[2] + valor_normalizado * (stats[1] - stats[0])
 
-def estima_preco(ano, km, c, tipo, data):
-    """Preço em R$ estimado pelo modelo para um carro (ano-modelo, km)."""
+def estima_preco(ano, km, c, grau, data):
+    """Preço em R$ estimado pelo modelo polinomial de grau n para um carro (ano-modelo, km)."""
     A, K = normalize_test_values(ano, km, data)
-    if tipo == 'lin':
-        X = np.array([1, A, K])
-    else:
-        X = np.array([1, A, K, A**2, A*K, K**2])
+
+    termos = [
+        (A ** (d - j)) * (K ** j)
+        for d in range(grau + 1)
+        for j in range(d + 1)
+    ]
+    X = np.array(termos, dtype=float)
+
     return desnormalize_values(X @ c, data['preco_stats'])

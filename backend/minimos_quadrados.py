@@ -38,51 +38,39 @@ def normaliza(x):
     coletados;
 """
 #PASSO 3
-def solucao_sistema(A, K, P, tipo_solucao):
+def solucao_sistema(A, K, P, grau):
     """
-        A -> Ano normalizado
-        K -> Quilometragem normalizada
-        P -> Preço normalizado
-        tipo_solucao -> 'lin' ou 'quad'
+    Monta e resolve o sistema normal (X^T X) c = X^T P para um polinômio 2D de grau n.
 
-        Retorna Mc = b, retorna [M, b e c (solução)]
+    Parâmetros:
+        A (array-like): Ano normalizado
+        K (array-like): Quilometragem normalizada
+        P (array-like): Preço normalizado
+        grau (int): Grau n do polinômio de aproximação (ex: 1 para linear, 2 para quadrático, etc.)
+
+    Retorna:
+        list: [M, b, c] onde M = X^T X, b = X^T P e c é o vetor de coeficientes.
     """
-    N = len(P)
-    ones = np.ones(N)
+    A = np.asarray(A, dtype=float)
+    K = np.asarray(K, dtype=float)
+    P = np.asarray(P, dtype=float)
 
-    # ==========================================
-    # 1. MODELO LINEAR: p̂(A,K) = c0 + c1*A + c2*K
-    #
-    #   c_lin = [c0, c1, c2]^T                         (vetor coluna 3x1)
-    #
-    #   X_lin = [1 | A | K]                            (matriz de planejamento Nx3) (No caso quadratico essa matriz aumenta)
-    #
-    #   y = P = [P_1, P_2, ..., P_N]^T                 (vetor de observações Nx1)
-    #
-    #   Função objetivo (Soma dos Quadrados dos Resíduos):
-    #   S(c) = Sum(P_i - p̂(A_i, K_i))^2
-    #        = ||y - X c||_2^2
-    #        = (y - X c)^T (y - X c)
-    #
-    #   Expandindo o produto matricial:
-    #   S(c) = y^T y - y^T X c - c^T X^T y + c^T X^T X c
-    #        = y^T y - 2 c^T X^T y + c^T (X^T X) c       (pois y^T X c é escalar: y^T X c = (y^T X c)^T = c^T X^T y)
-    #
-    #   Derivando em relação ao vetor c e igualando a zero (condição de mínimo):
-    #   ∇S(c) = dS/dc = -2 X^T y + 2 (X^T X) c = 0
-    #
-    #   Isolando c, chegamos às Equações Normais:
-    #   (X^T X) c = X^T y
-    #
-    #   Mapeamento para as variáveis do código:
-    #   M_lin = X_lin^T @ X_lin                        (matriz simétrica 3x3)
-    #   b_lin = X_lin^T @ P                            (vetor coluna 3x1)
-    #   M_lin @ c_lin = b_lin  =>  c_lin = np.linalg.solve(M_lin, b_lin)
-    # ==========================================
-    if tipo_solucao == 'lin':
-      X_approx = np.column_stack([ones, A, K])
-    else:
-      X_approx = np.column_stack([ones, A, K, A**2, A * K, K**2])
+    if grau == "lin":
+        grau = 1
+    elif grau == "quad":
+        grau = 2
+
+    if not isinstance(grau, int) or grau < 0:
+        raise ValueError("O parâmetro 'grau' deve ser um número inteiro maior ou igual a 0.")
+
+    # Gera dinamicamente as colunas [1, A, K, A^2, A*K, K^2, ..., A^n, ..., K^n]
+    colunas = []
+    for d in range(grau + 1):           # d percorre cada grau de 0 até n
+        for j in range(d + 1):          # j é o expoente de K (de 0 até d)
+            i = d - j                   # i é o expoente de A (de d até 0)
+            colunas.append((A ** i) * (K ** j))
+
+    X_approx = np.column_stack(colunas)
 
     M = X_approx.T @ X_approx
     b = X_approx.T @ P
@@ -90,36 +78,57 @@ def solucao_sistema(A, K, P, tipo_solucao):
 
     return [M, b, c]
 
-def plotar_modelo_3d(A, K, P, c, tipo_solucao, titulo='', arquivo=None):
+
+def plotar_modelo_3d(A, K, P, c, grau, titulo='', arquivo=None):
     """
-    Gera um gráfico 3D comparando os dados reais com a superfície ajustada (linear ou quadrática).
+    Gera um gráfico 3D comparando os dados reais com a superfície polinomial ajustada de grau n.
 
     Parâmetros:
         A -> Array com Ano normalizado
         K -> Array com Quilometragem normalizada
         P -> Array com Preço normalizado
         c -> Vetor de coeficientes retornado por solucao_sistema
-        tipo_solucao -> 'lin' ou 'quad'
+        grau -> Grau n do polinômio de aproximação (ex: 1, 2, 3, ...)
         titulo -> (opcional) texto extra no título, ex.: nome do carro
         arquivo -> (opcional) caminho para salvar a imagem; se omitido, abre a janela do gráfico
     """
+    if grau == "lin":
+        grau = 1
+    elif grau == "quad":
+        grau = 2
+
+    if not isinstance(grau, int) or grau < 0:
+        raise ValueError("O parâmetro 'grau' deve ser um número inteiro maior ou igual a 0.")
+
+    c = np.asarray(c, dtype=float)
+    n_coef_esperado = (grau + 1) * (grau + 2) // 2
+    if len(c) != n_coef_esperado:
+        raise ValueError(
+            f"Para grau {grau}, o vetor 'c' deve ter {n_coef_esperado} coeficientes, mas recebeu {len(c)}."
+        )
+
     # 1. Criar uma malha (grid) regular de pontos entre os valores mínimos e máximos de A e K
     a_grid = np.linspace(np.min(A), np.max(A), 30)
     k_grid = np.linspace(np.min(K), np.max(K), 30)
     A_mesh, K_mesh = np.meshgrid(a_grid, k_grid)
 
     # 2. Calcular o Preço estimado (P_hat) para cada ponto da malha usando os coeficientes 'c'
-    if tipo_solucao == 'lin':
-        # p̂(A,K) = c0 + c1*A + c2*K
-        P_mesh = c[0] + c[1]*A_mesh + c[2]*K_mesh
-        titulo_modelo = 'Ajuste Linear (Plano)'
-    elif tipo_solucao == 'quad':
-        # p̂(A,K) = c0 + c1*A + c2*K + c3*A^2 + c4*A*K + c5*K^2
-        P_mesh = (c[0] + c[1]*A_mesh + c[2]*K_mesh + 
-                  c[3]*(A_mesh**2) + c[4]*(A_mesh * K_mesh) + c[5]*(K_mesh**2))
-        titulo_modelo = 'Ajuste Quadrático (Superfície Curva)'
-    else:
-        raise ValueError("tipo_solucao deve ser 'lin' ou 'quad'")
+    P_mesh = np.zeros_like(A_mesh, dtype=float)
+    idx = 0
+    for d in range(grau + 1):
+        for j in range(d + 1):
+            i = d - j
+            P_mesh += c[idx] * (A_mesh ** i) * (K_mesh ** j)
+            idx += 1
+
+    # Define rótulo amigável para graus clássicos ou genérico para graus maiores
+    nomes_grau = {
+        0: 'Ajuste Constante (Grau 0)',
+        1: 'Ajuste Linear (Plano)',
+        2: 'Ajuste Quadrático (Superfície Curva)',
+        3: 'Ajuste Cúbico (Grau 3)'
+    }
+    titulo_modelo = nomes_grau.get(grau, f'Ajuste Polinomial (Grau {grau})')
 
     # 3. Configurar a figura e o eixo 3D
     fig = plt.figure(figsize=(10, 7))
@@ -135,17 +144,16 @@ def plotar_modelo_3d(A, K, P, c, tipo_solucao, titulo='', arquivo=None):
     ax.set_xlabel('Ano Normalizado (A)', labelpad=10)
     ax.set_ylabel('Quilometragem Normalizada (K)', labelpad=10)
     ax.set_zlabel('Preço Normalizado (P)', labelpad=10)
-    ax.set_title(f'Regressão por Mínimos Quadrados - {titulo_modelo}', fontsize=13, pad=15)
-    
+
+    prefixo = titulo if titulo else 'Regressão por Mínimos Quadrados'
+    ax.set_title(f'{prefixo} - {titulo_modelo}', fontsize=13, pad=15)
+
     # Adiciona legenda e barra de escala do preço previsto
     ax.legend(loc='upper left')
     fig.colorbar(superficie, ax=ax, shrink=0.5, aspect=10, label='Preço Estimado')
 
     # Ajusta o ângulo de visão inicial (elevação, azimute)
     ax.view_init(elev=25, azim=-135)
-
-    if titulo:
-        ax.set_title(f'{titulo} - {titulo_modelo}', fontsize=13, pad=15)
 
     plt.tight_layout()
     mostrar_ou_salvar(fig, arquivo)
