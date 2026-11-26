@@ -166,11 +166,6 @@ def plotar_modelo_3d(A, K, P, c, grau, titulo='', arquivo=None):
         titulo -> (opcional) texto extra no título, ex.: nome do carro
         arquivo -> (opcional) caminho para salvar a imagem; se omitido, abre a janela do gráfico
     """
-    if grau == "lin":
-        grau = 1
-    elif grau == "quad":
-        grau = 2
-
     if not isinstance(grau, int) or grau < 0:
         raise ValueError("O parâmetro 'grau' deve ser um número inteiro maior ou igual a 0.")
 

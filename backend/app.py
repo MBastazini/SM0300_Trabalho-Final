@@ -285,6 +285,12 @@ def upload_csv():
         return jsonify({"error": "O CSV nao possui linhas de dados."}), 400
 
     file_path = DATA_DIR / filename
+    # Não sobrescreve os dados existentes (ex.: subir outro 'onix.csv' apagaria o original)
+    if file_path.exists():
+        return jsonify({
+            "error": f"Ja existe um arquivo chamado {filename}. Renomeie o CSV e tente de novo."
+        }), 409
+
     file_path.write_text(text, encoding="utf-8")
     calculation_cache.clear()
 
@@ -451,6 +457,102 @@ def estimar_preco_csv(csv_name):
         "km": km,
         "degree": grau,
         "polynomial": float(polynomial_price),
+    })
+
+
+@app.get("/api/funcoes/valida/<path:csv_name>")
+def validar_modelo_csv(csv_name):
+    """
+    Valida a curva ajustada com `csv_name` usando os anúncios de outro CSV (?teste=arquivo.csv).
+    Os anúncios de teste não entram no ajuste: são normalizados com as estatísticas
+    (min, max, média) do CSV de ajuste e o modelo apenas prevê o preço deles.
+    """
+    test_name = request.args.get("teste", "")
+    train_path = (DATA_DIR / csv_name).resolve()
+    test_path = (DATA_DIR / test_name).resolve()
+
+    for file_path in (train_path, test_path):
+        if not test_name or DATA_DIR.resolve() not in file_path.parents or not file_path.is_file():
+            return jsonify({"error": "Arquivo CSV nao encontrado."}), 404
+
+    try:
+        grau = int(request.args.get("grau", 2))
+    except (TypeError, ValueError):
+        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 3."}), 400
+    if grau not in SUPPORTED_MODEL_DEGREES:
+        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 3."}), 400
+
+    models = calculation_cache.get_models(csv_name, grau)
+    normalized = calculation_cache.get_normalized(csv_name)
+    if models is None or normalized is None:
+        return jsonify({"error": "Nao foi possivel calcular o modelo."}), 422
+    _, _, coefficients = models["polynomial"]
+
+    test_rows = []
+    with test_path.open("r", encoding="utf-8-sig", newline="") as csv_file:
+        for row in csv.DictReader(csv_file):
+            try:
+                test_rows.append((float(row["ano"]), float(row["km"]), float(row["preco"])))
+            except (KeyError, TypeError, ValueError):
+                continue
+    if not test_rows:
+        return jsonify({
+            "error": "O CSV de validacao nao possui linhas com ano, km e preco numericos."
+        }), 422
+
+    test_data = np.array(test_rows, dtype=float)
+    ano, km, preco = test_data[:, 0], test_data[:, 1], test_data[:, 2]
+
+    def normalize_with_train_stats(values, stats):
+        span = stats[1] - stats[0]
+        return (values - stats[2]) / span if span else np.zeros_like(values)
+
+    ano_stats = normalized["ano_stats"]
+    km_stats = normalized["km_stats"]
+    price_stats = normalized["preco_stats"]
+    ano_normalized = normalize_with_train_stats(ano, ano_stats)
+    km_normalized = normalize_with_train_stats(km, km_stats)
+
+    x_polynomial = np.column_stack([
+        (ano_normalized ** (d - j)) * (km_normalized ** j)
+        for d in range(grau + 1)
+        for j in range(d + 1)
+    ])
+    estimated_price = desnormalize_values(x_polynomial @ coefficients, price_stats)
+
+    reqm = float(mq.REQM(estimated_price, preco))
+    agio = mq.agio_percentual(estimated_price, preco)
+    # Fora da faixa de ano/km do ajuste, a curva está extrapolando
+    out_of_range = (
+        (ano < ano_stats[0]) | (ano > ano_stats[1])
+        | (km < km_stats[0]) | (km > km_stats[1])
+    )
+
+    return jsonify({
+        "csv_file": csv_name,
+        "test_file": test_name,
+        "degree": grau,
+        "train_reqm": models["reqm"],
+        "train_count": int(len(models["preco"])),
+        "test_reqm": reqm,
+        "test_count": int(len(preco)),
+        "rows": [
+            {
+                "ano": int(ano[i]),
+                "km": int(km[i]),
+                "preco": float(preco[i]),
+                "estimado": float(estimated_price[i]),
+                "erro": float(preco[i] - estimated_price[i]),
+                "agio": float(agio[i]),
+                "fora_da_faixa": bool(out_of_range[i]),
+            }
+            for i in range(len(preco))
+        ],
+        "normalized": {
+            "ano": ano_normalized.tolist(),
+            "km": km_normalized.tolist(),
+            "preco": normalize_with_train_stats(preco, price_stats).tolist(),
+        },
     })
 
 

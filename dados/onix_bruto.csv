@@ -1,91 +1,101 @@
-id,ano,km,preco,cidade,versao_anunciada
-e1910666,2017,78000,58900,Araraquara,1.0 Spe 4 Eco Lt
-b7348952,2017,105474,49990,Ribeirao Preto,1.0 Spe 4 Eco Lt
-cb82261b,2017,110000,51900,Ribeirao Preto,1.0 Spe 4 Eco Lt
-0f47f6e9,2017,112000,52900,Piracicaba,Hatch Lt 1.0 8v Flexpower 5p Mec.
-6b9ebaf7,2017,123190,58990,Rio Claro,Hatch Lt 1.0 8v Flexpower 5p Mec.
-66078743,2017,127101,52990,Ribeirao Preto,1.0 Spe 4 Eco Lt
-a3df70a2,2017,182000,54990,Rio Claro,1.0 Spe 4 Eco Lt
-bcc12c07,2018,74300,53900,Pirassununga,1.0 Spe 4 Eco Lt
-19048e7e,2018,115000,52900,Ribeirao Preto,1.0 Spe 4 Eco Lt
-561c292e,2018,126000,46900,Jau,1.0 Spe 4 Eco Lt
-e2f0f554,2018,138232,54000,Araras,Hatch Lt 1.0 8v Flexpower 5p Mec.
-3a8c38c1,2018,157500,55900,Piracicaba,1.0 Spe 4 Eco Lt
-82ea8bd9,2018,167026,57990,Piracicaba,Hatch Lt 1.0 8v Flexpower 5p Mec.
-3ced9be3,2019,56,45697,Limeira,1.0 Spe 4 Eco Lt
-e6ce5b27,2019,69500,55900,Pirassununga,1.0 Spe 4 Eco Lt
-59fc170b,2019,86000,55900,Sao Carlos,1.0 Spe 4 Eco Lt
-4d68249b,2019,90000,55900,Limeira,Hatch Lt 1.0 8v Flexpower 5p Mec.
-5004ebf5,2019,109000,55900,Araraquara,1.0 Spe 4 Eco Lt
-43152b4c,2019,117000,53900,Piracicaba,1.0 Spe 4 Eco Lt
-53afc7e5,2019,119000,53900,Piracicaba,1.0 Spe 4 Eco Lt
-0eaafb02,2019,129000,53900,Piracicaba,1.0 Spe 4 Eco Lt
-f01b697f,2019,140000,55990,Ribeirao Preto,1.0 Spe 4 Eco Lt
-3f03b111,2020,75400,59880,Limeira,Hatch Lt 1.0 12v Flex 5p Mec.
-250d7a12,2020,98524,54399,Limeira,1.0 Lt
-449e80ed,2020,115489,53900,Ribeirao Preto,1.0 Lt
-b5ed343b,2020,121250,53890,Piracicaba,Hatch Lt 1.0 12v Flex 5p Mec.
-0c5d2dd5,2021,86,56399,Limeira,1.0 Lt
-90a36af8,2021,70557,57899,Limeira,1.0 Lt
-7f1a236f,2021,79606,53499,Limeira,1.0 Lt
-6568bfd5,2021,89900,67990,Rio Claro,Hatch Lt 1.0 12v Flex 5p Mec.
-ada50744,2021,108000,63990,Rio Claro,Hatch Lt 1.0 8v Flexpower 5p Mec.
-0415ec50,2021,128000,59900,Araraquara,1.0 Lt
-01ab4a57,2021,203126,58880,Ribeirao Preto,Hatch Lt 1.0 12v Flex 5p Mec.
-d0d60ff1,2022,31337,58499,Limeira,1.0 Lt
-70be1694,2022,34807,57399,Limeira,1.0 Lt
-317b89a5,2022,36393,53599,Piracicaba,1.0 Lt
-92d94cee,2022,55339,58599,Limeira,1.0 Lt
-11d2fa18,2022,63665,66990,Rio Claro,1.0 Lt
-f75b36fd,2022,84112,57399,Limeira,1.0 Lt
-c4aabc6e,2023,35154,56099,Piracicaba,1.0 Lt
-3c5b42a9,2023,47792,66900,Piracicaba,Hatch Lt 1.0 12v Flex 5p Mec.
-e5d14385,2023,54824,63990,Piracicaba,Hatch Lt 1.0 12v Flex 5p Mec.
-3b5875dd,2023,60607,56099,Limeira,1.0 Lt
-b4510d5b,2023,63059,66900,Ribeirao Preto,1.0 Lt
-be860af6,2023,64744,56099,Piracicaba,1.0 Lt
-6ca7bcc3,2023,69000,64900,Ribeirao Preto,1.0 Lt
-03d730a8,2023,71140,74990,Rio Claro,Hatch Lt 1.0 12v Flex 5p Mec.
-5e62ee7f,2023,71833,58999,Limeira,1.0 Lt
-6639f845,2023,76416,56099,Piracicaba,1.0 Lt
-21882e9c,2023,76913,59799,Limeira,1.0 Lt
-3352656b,2023,76913,58899,Piracicaba,1.0 Lt
-ded9dcdd,2023,77267,56099,Piracicaba,1.0 Lt
-5898850e,2023,79622,56099,Limeira,1.0 Lt
-0e8b7317,2023,80437,56099,Piracicaba,1.0 Lt
-997097da,2023,80935,56099,Piracicaba,1.0 Lt
-ae9c8f8d,2023,94810,67700,Sao Carlos,1.0 Lt
-08d946e6,2023,147839,64900,Araraquara,1.0 Lt
-25e933aa,2024,1,69900,Pirassununga,Hatch Lt 1.0 12v Flex 5p Mec.
-691217c7,2024,17000,76990,Araraquara,Hatch Lt 1.0 8v Flexpower 5p Mec.
-07d97b9c,2024,30000,67900,Piracicaba,1.0 Lt
-c8b67353,2024,33000,75900,Piracicaba,1.0 Lt
-ae700b63,2024,52329,72900,Rio Claro,Hatch Lt 1.0 8v Flexpower 5p Mec.
-3910d67b,2024,63804,73390,Ribeirao Preto,1.0 Lt
-705fa271,2024,69707,73990,Matao,1.0 Lt
-77e34c2b,2024,76557,59099,Piracicaba,1.0 Lt
-dd3cfba9,2024,77046,62599,Limeira,1.0 Lt
-f7e42452,2025,19000,69990,Piracicaba,1.0 Lt
-7f7cec99,2025,19936,82490,Ribeirao Preto,1.0 Lt
-0b6e9439,2025,25626,79490,Piracicaba,1.0 Lt
-d780844d,2025,27000,69990,Ribeirao Preto,Hatch Lt 1.0 8v Flexpower 5p Mec.
-c85a42eb,2025,29915,79590,Araras,1.0 Lt
-320f78bf,2025,31000,72700,Araraquara,1.0 Lt
-21c63ca0,2025,34957,78690,Ribeirao Preto,1.0 Lt
-546e5a46,2025,36094,61299,Piracicaba,1.0 Lt
-d5f92acf,2025,37343,64899,Limeira,1.0 Lt
-d5649e25,2025,40000,71990,Ribeirao Preto,Hatch Lt 1.0 8v Flexpower 5p Mec.
-33bdc4a5,2025,41458,75990,Araraquara,1.0 Lt
-0b7d7e1c,2025,42174,75990,Sao Carlos,1.0 Lt
-441bc756,2025,43500,74900,Araraquara,1.0 Lt
-887c786f,2025,45579,61299,Piracicaba,1.0 Lt
-7459ecd4,2025,47257,75990,Sao Carlos,1.0 Lt
-846c066d,2025,47695,61299,Piracicaba,1.0 Lt
-f1925b4d,2025,47716,67990,Ribeirao Preto,1.0 Lt
-cfcc35fc,2025,49222,80900,Matao,1.0 Lt
-189eb5f3,2025,52613,72900,Araraquara,1.0 Lt
-c08b4259,2025,53445,64899,Limeira,1.0 Lt
-3f40d153,2025,57780,64990,Piracicaba,Hatch Lt 1.0 12v Flex 5p Mec.
-d20cb34a,2025,59284,69900,Piracicaba,1.0 Lt
-98b7bb76,2025,64056,79900,Americo Brasiliense,1.0 Lt
-f0db4e37,2025,89776,68190,Ribeirao Preto,1.0 Lt
+ano,preco,km,cidade,cor,IPVA,licenciado
+2021,55900,69729,São Paulo,Prata,Sim,Sim
+2021,56900,80000,Votorantim,Azul,Sim,Sim
+2021,58985,79001,Cotia,Prata,Sim,Sim
+2021,59890,127000,São Paulo,Prata,Sim,Sim
+2021,59899,54452,São Bernardo do Campo,Prata,Sim,Não informado
+2021,59900,94000,Louveira,Preto,Não informado,Não informado
+2021,59990,140000,São José dos Campos,Preto,Não informado,Não informado
+2021,60900,90000,Franco da Rocha,Branco,Sim,Sim
+2021,62900,64588,Lençóis Paulista,Prata,Não informado,Não informado
+2021,63900,41112,Paulínia,Preto,Não informado,Sim
+2021,63990,126500,Mogi das Cruzes,Branco,Não informado,Não informado
+2021,64900,141938,Campinas,Prata,Não informado,Sim
+2021,65800,58000,Santo André,Vermelho,Não informado,Não informado
+2021,66900,39245,Paulínia,Preto,Não informado,Sim
+2021,66900,67018,Campinas,Preto,Não informado,Sim
+2021,67990,113603,Jundiaí,Branco,Não informado,Não informado
+2021,69900,120900,Jaboticabal,Branco,Não informado,Não informado
+2021,69990,110848,Espírito Santo do Pinhal,Preto,Não informado,Não informado
+2021,73000,70100,Regente Feijó,Cinza,Não informado,Não informado
+2021,74900,20000,São Paulo,Prata,Sim,Sim
+2022,53900,110000,São Paulo,Preto,Sim,Sim
+2022,56499,87343,Osasco,Prata,Sim,Não informado
+2022,58099,69542,São Paulo,Preto,Sim,Não informado
+2022,58990,62233,Rio Claro,Prata,Não informado,Não informado
+2022,60000,46000,São Paulo,Prata,Sim,Sim
+2022,60790,77153,São Paulo,Prata,Não informado,Não informado
+2022,62990,60000,Mogi das Cruzes,Preto,Não informado,Não informado
+2022,63900,43000,Barueri,Preto,Não informado,Não informado
+2022,63900,81588,Campinas,Preto,Não informado,Sim
+2022,64890,44000,São Paulo,Prata,Sim,Sim
+2022,64990,45000,Campinas,Branco,Não informado,Não informado
+2022,65990,60407,São Paulo,Branco,Sim,Não informado
+2022,66900,90536,Sumaré,Branco,Não informado,Sim
+2022,67799,70011,Osasco,Prata,Não informado,Não informado
+2022,69900,88549,Santo André,Cinza,Não informado,Não informado
+2022,69900,37301,Sumaré,Branco,Não informado,Sim
+2022,69990,83386,Campinas,Branco,Não informado,Não informado
+2022,71990,103906,Campinas,Prata,Não informado,Não informado
+2022,73900,27000,São Paulo,Azul,Sim,Sim
+2022,79900,10000,Santo André,Branco,Não informado,Não informado
+2023,58650,80861,São Paulo,Preto,Sim,Não informado
+2023,59990,108232,Ribeirão Preto,Branco,Não informado,Não informado
+2023,60790,61196,São Paulo,Preto,Não informado,Não informado
+2023,60900,142000,Bonfim Paulista,Azul,Sim,Sim
+2023,63500,55900,São Paulo,Prata,Sim,Sim
+2023,63900,40390,Itu,Branco,Sim,Sim
+2023,64490,87654,São José do Rio Preto,Prata,Não informado,Não informado
+2023,65000,97000,Vinhedo,Prata,Sim,Sim
+2023,65490,37400,Santo André,Vermelho,Sim,Sim
+2023,65900,18687,Cajamar,Vermelho,Não informado,Não informado
+2023,66000,24025,São Paulo,Prata,Sim,Sim
+2023,66900,58145,Indaiatuba,Prata,Sim,Sim
+2023,69890,47625,Mogi das Cruzes,Branco,Não informado,Não informado
+2023,69900,86593,São José dos Campos,Branco,Sim,Sim
+2023,69900,53470,Sumaré,Branco,Não informado,Sim
+2023,69900,68410,Bebedouro,Branco,Sim,Sim
+2023,71270,21000,Santo André,Preto,Sim,Sim
+2023,73990,69707,Matão,Branco,Sim,Não informado
+2023,75900,29000,Marília,Branco,Sim,Sim
+2023,78500,30500,Boituva,Prata,Sim,Sim
+2024,59780,51500,Jundiaí,Preto,Sim,Sim
+2024,59900,35000,São Paulo,Branco,Sim,Sim
+2024,59989,62000,São Paulo,Branco,Sim,Sim
+2024,61990,85200,São José do Rio Preto,Preto,Sim,Sim
+2024,63290,57203,São Paulo,Branco,Sim,Sim
+2024,64899,48765,São Paulo,Branco,Sim,Não informado
+2024,64990,34451,Sertãozinho,Vermelho,Não informado,Não informado
+2024,65990,26470,Santo André,Preto,Sim,Não informado
+2024,67900,44000,São Paulo,Cinza,Não informado,Sim
+2024,69800,45000,São Paulo,Prata,Não informado,Não informado
+2024,69900,14000,Ribeirão Preto,Preto,Sim,Sim
+2024,69900,57984,Campinas,Branco,Não informado,Não informado
+2024,69990,45000,São José dos Campos,Prata,Não informado,Não informado
+2024,71990,13000,Praia Grande,Cinza,Sim,Sim
+2024,72000,64000,Taubaté,Preto,Sim,Sim
+2024,76900,68000,Bauru,Branco,Não informado,Não informado
+2024,80590,25197,Santo André,Prata,Sim,Sim
+2024,81090,21895,Campinas,Cinza,Sim,Sim
+2024,82290,17254,São Paulo,Prata,Sim,Sim
+2024,82490,19936,Ribeirão Preto,Preto,Sim,Sim
+2025,65200,45376,São Paulo,Branco,Sim,Sim
+2025,66900,12919,São Paulo,Branco,Sim,Sim
+2025,66990,30000,Santo André,Branco,Sim,Sim
+2025,69900,34320,Valinhos,Branco,Não informado,Não informado
+2025,69900,31000,Mogi Mirim,Branco,Não informado,Não informado
+2025,69900,34000,São Paulo,Cinza,Não informado,Sim
+2025,69990,25000,Santo André,Branco,Não informado,Sim
+2025,71900,30000,Santo André,Branco,Sim,Sim
+2025,72499,5300,Pindamonhangaba,Cinza,Sim,Sim
+2025,74900,35491,Amparo,Preto,Não informado,Não informado
+2025,75990,34900,Santo André,Branco,Não informado,Não informado
+2025,76490,30233,São Paulo,Cinza,Sim,Sim
+2025,76490,30611,Campinas,Prata,Sim,Sim
+2025,78690,34957,Ribeirão Preto,Branco,Sim,Sim
+2025,78890,29214,Campinas,Prata,Sim,Sim
+2025,79090,25390,São Bernardo do Campo,Preto,Sim,Não informado
+2025,79090,29173,São Paulo,Branco,Sim,Sim
+2025,79990,22198,Ribeirão Preto,Prata,Sim,Sim
+2025,82390,12149,São Paulo,Preto,Sim,Sim
+2025,82590,8453,Osasco,Branco,Sim,Sim

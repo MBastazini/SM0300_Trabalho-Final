@@ -89,6 +89,45 @@ class BackendTest(unittest.TestCase):
 
             self.assertEqual(response.status_code, 201)
             self.assertIn(csv_name, list_csv_files())
+
+            # Subir de novo com o mesmo nome não pode sobrescrever o arquivo
+            repetido = (BytesIO(b"ano,km,preco\n2020,1,1\n"), csv_name)
+            response = self.client.post(
+                "/api/dados/upload",
+                data={"file": repetido},
+                content_type="multipart/form-data",
+            )
+            self.assertEqual(response.status_code, 409)
+            self.assertIn("90000", file_path.read_text(encoding="utf-8"))
+        finally:
+            if file_path.is_file():
+                file_path.unlink()
+
+    def test_validation_uses_curve_from_other_csv(self):
+        csv_name = "teste_validacao.csv"
+        file_path = DATA_DIR / csv_name
+        # O segundo carro tem km acima do máximo do onix.csv: deve ser marcado como fora da faixa
+        file_path.write_text("ano,km,preco\n2022,48000,66000\n2023,900000,40000\n", encoding="utf-8")
+
+        try:
+            response = self.client.get(f"/api/funcoes/valida/onix.csv?teste={csv_name}&grau=2")
+            payload = response.get_json()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(payload["test_count"], 2)
+            self.assertEqual(len(payload["rows"]), 2)
+            self.assertFalse(payload["rows"][0]["fora_da_faixa"])
+            self.assertTrue(payload["rows"][1]["fora_da_faixa"])
+
+            # A previsão tem que ser a mesma do endpoint de estimativa (mesma curva)
+            estimate = self.client.post(
+                "/api/funcoes/estima/onix.csv",
+                json={"ano": 2022, "km": 48000, "grau": 2},
+            ).get_json()
+            self.assertAlmostEqual(payload["rows"][0]["estimado"], estimate["polynomial"], places=6)
+
+            missing = self.client.get("/api/funcoes/valida/onix.csv?teste=nao_existe.csv")
+            self.assertEqual(missing.status_code, 404)
         finally:
             if file_path.is_file():
                 file_path.unlink()

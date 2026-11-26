@@ -11,7 +11,7 @@ print(f"Coeficientes do modelo linear: {M_lin}, {b_lin}, {c_lin}")
 mq.plotar_modelo_3d(onix_data['ano'], onix_data['km'], onix_data['preco'], c_lin, 'lin')
 [M_quad, b_quad, c_quad] = mq.solucao_sistema([onix_data['ano'], onix_data['km']], onix_data['preco'], 'quad')
 print(f"Coeficientes do modelo quadratico: {M_quad}, {b_quad}, {c_quad}")
-mq.plotar_modelo_3d(onix_data['ano'], onix_data['km'], onix_data['preco'], c_quad, 'quad')
+mq.plotar_modelo_3d(onix_data['ano'], onix_data['km'], onix_data['preco'], c_quad, 2)
 
 print("Determinando os valores estimados...")
 
