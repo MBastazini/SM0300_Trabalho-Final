@@ -24,6 +24,12 @@ const csvFileInput = ref(null)
 const isUploadingCsv = ref(false)
 const polynomialDegree = ref(2)
 const showPolynomialSurface = ref(true)
+const validationCsv = ref('')
+const validationData = ref(null)
+const validationError = ref('')
+const isValidating = ref(false)
+const validationFileInput = ref(null)
+const validationChart = ref(null)
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -55,6 +61,28 @@ function openCsvPicker() {
   csvFileInput.value?.click()
 }
 
+// Envia o CSV para o backend e devolve o nome com que ele foi salvo em dados/
+async function sendCsvFile(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch('/api/dados/upload', {
+    method: 'POST',
+    body: formData,
+  })
+  const data = await response.json()
+
+  if (!response.ok) {
+    const missing = data.missing?.length
+      ? ` Colunas ausentes: ${data.missing.join(', ')}.`
+      : ''
+    throw new Error((data.error || 'Nao foi possivel adicionar o CSV.') + missing)
+  }
+
+  await fetchCsvFiles()
+  return data.csv_file
+}
+
 async function uploadCsv(event) {
   const file = event.target.files?.[0]
   event.target.value = ''
@@ -64,29 +92,146 @@ async function uploadCsv(event) {
   errorMessage.value = ''
 
   try {
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const response = await fetch('/api/dados/upload', {
-      method: 'POST',
-      body: formData,
-    })
-    const data = await response.json()
-
-    if (!response.ok) {
-      const missing = data.missing?.length
-        ? ` Colunas ausentes: ${data.missing.join(', ')}.`
-        : ''
-      throw new Error((data.error || 'Nao foi possivel adicionar o CSV.') + missing)
-    }
-
-    await fetchCsvFiles()
-    selectedCsv.value = data.csv_file
+    selectedCsv.value = await sendCsvFile(file)
   } catch (error) {
     errorMessage.value = error.message || 'Nao foi possivel adicionar o CSV.'
   } finally {
     isUploadingCsv.value = false
   }
+}
+
+function openValidationPicker() {
+  validationFileInput.value?.click()
+}
+
+// O CSV adicionado aqui vira a planilha de validação (não troca a planilha da curva)
+async function uploadValidationCsv(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+
+  isUploadingCsv.value = true
+  validationError.value = ''
+
+  try {
+    validationCsv.value = await sendCsvFile(file)
+  } catch (error) {
+    validationError.value = error.message || 'Nao foi possivel adicionar o CSV.'
+  } finally {
+    isUploadingCsv.value = false
+  }
+}
+
+function clearValidation() {
+  validationData.value = null
+  validationError.value = ''
+  if (validationChart.value) Plotly.purge(validationChart.value)
+}
+
+async function validateModel() {
+  if (!modelData.value || !validationCsv.value) return
+
+  isValidating.value = true
+  clearValidation()
+
+  try {
+    // Usa a curva que está na tela: a do CSV e do grau do último "Calcular"
+    const response = await fetch(
+      `/api/funcoes/valida/${encodeURIComponent(selectedName.value)}`
+        + `?teste=${encodeURIComponent(validationCsv.value)}&grau=${modelData.value.degree}`,
+    )
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`)
+
+    validationData.value = data
+    await nextTick()
+    renderValidationChart()
+    renderSurfaceChart()
+  } catch (error) {
+    validationError.value = error.message || 'Nao foi possivel validar a curva.'
+  } finally {
+    isValidating.value = false
+  }
+}
+
+function countBySituation(rowsToCount) {
+  return {
+    bargain: rowsToCount.filter((row) => row.agio <= -10).length,
+    fair: rowsToCount.filter((row) => Math.abs(row.agio) < 10).length,
+    above: rowsToCount.filter((row) => row.agio >= 10).length,
+  }
+}
+
+function reqmChange() {
+  const { train_reqm: train, test_reqm: test } = validationData.value
+  const change = 100 * (test - train) / train
+  return `${change >= 0 ? '+' : ''}${change.toFixed(1).replace('.', ',')}%`
+}
+
+function renderValidationChart() {
+  if (!validationChart.value || !validationData.value) return
+
+  const validationRows = validationData.value.rows
+  const prices = validationRows.flatMap((row) => [row.preco, row.estimado])
+  const low = Math.min(...prices) * 0.97
+  const high = Math.max(...prices) * 1.03
+
+  Plotly.react(
+    validationChart.value,
+    [
+      {
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Previsão perfeita',
+        x: [low, high],
+        y: [low, high],
+        line: { color: '#0f172a', width: 1.5, dash: 'dash' },
+        hoverinfo: 'skip',
+      },
+      {
+        type: 'scatter',
+        mode: 'lines',
+        name: '±10%',
+        x: [low, high, null, low, high],
+        y: [low * 1.1, high * 1.1, null, low * 0.9, high * 0.9],
+        line: { color: '#94a3b8', width: 1, dash: 'dot' },
+        hoverinfo: 'skip',
+      },
+      {
+        type: 'scatter',
+        mode: 'markers',
+        name: 'Anúncios de validação',
+        x: validationRows.map((row) => row.preco),
+        y: validationRows.map((row) => row.estimado),
+        customdata: validationRows.map((row) => [row.ano, row.km, row.agio]),
+        marker: {
+          size: 9,
+          color: validationRows.map((row) => (
+            row.agio <= -10 ? '#22c55e' : row.agio >= 10 ? '#ef4444' : '#3b82f6'
+          )),
+          symbol: validationRows.map((row) => (row.fora_da_faixa ? 'x' : 'circle')),
+          line: { color: '#ffffff', width: 1 },
+        },
+        hovertemplate: '%{customdata[0]} · %{customdata[1]:,} km<br>'
+          + 'Real: R$ %{x:,.2f}<br>Previsto: R$ %{y:,.2f}<br>'
+          + 'Ágio: %{customdata[2]:.1f}%<extra></extra>',
+      },
+    ],
+    {
+      margin: { l: 90, r: 24, b: 60, t: 35 },
+      height: 420,
+      paper_bgcolor: '#ffffff',
+      plot_bgcolor: '#ffffff',
+      title: {
+        text: 'Preço real × preço previsto pela curva',
+        font: { size: 15, color: '#0f172a' },
+      },
+      xaxis: { title: 'Preço anunciado (R$)', range: [low, high], separatethousands: true },
+      yaxis: { title: 'Preço previsto (R$)', range: [low, high], separatethousands: true },
+      legend: { orientation: 'h', x: 0, y: -0.2 },
+    },
+    { responsive: true, displaylogo: false },
+  )
 }
 
 async function calculateSelectedCsv() {
@@ -103,6 +248,7 @@ async function calculateSelectedCsv() {
   showPolynomialSurface.value = true
   estimateResult.value = null
   estimateComparisons.value = []
+  clearValidation()
   if (surfaceChart.value) Plotly.purge(surfaceChart.value)
   if (agioChart.value) Plotly.purge(agioChart.value)
   if (reqmChart.value) Plotly.purge(reqmChart.value)
@@ -412,9 +558,24 @@ function renderSurfaceChart() {
     visible: showPolynomialSurface.value,
   }
 
+  const traces = [scatterTrace, polynomialTrace]
+  if (validationData.value) {
+    // Pontos da planilha de validação, normalizados com as estatísticas da curva
+    const validationPoints = validationData.value.normalized
+    traces.push({
+      type: 'scatter3d',
+      mode: 'markers',
+      name: `Validação (${validationData.value.test_file})`,
+      x: validationPoints.ano,
+      y: validationPoints.km,
+      z: validationPoints.preco,
+      marker: { size: 5, color: '#f97316', symbol: 'diamond', opacity: 0.95 },
+    })
+  }
+
   Plotly.react(
     surfaceChart.value,
-    [scatterTrace, polynomialTrace],
+    traces,
     {
       margin: { l: 0, r: 0, b: 0, t: 20 },
       height: 520,
@@ -838,6 +999,158 @@ onMounted(fetchCsvFiles)
         <div class="empty-icon" aria-hidden="true">CSV</div>
         <h2>Nenhum resultado selecionado</h2>
         <p>Escolha um arquivo CSV e clique em Calcular para visualizar os dados.</p>
+      </section>
+
+      <section v-if="modelData" class="estimate-card" aria-labelledby="validation-title">
+        <div class="estimate-heading">
+          <div>
+            <p class="step-label">Validação</p>
+            <h2 id="validation-title">Valide a curva com outra planilha</h2>
+          </div>
+          <span class="source-name" :title="selectedName">
+            Curva: {{ selectedName }} · grau {{ modelData.degree }}
+          </span>
+        </div>
+
+        <div class="estimate-content">
+          <p class="process-description validation-description">
+            A curva continua sendo a calculada com <strong>{{ selectedName }}</strong>.
+            Os anúncios da planilha de validação não entram no ajuste: a curva só prevê o
+            preço deles, e o erro mostra o quanto ela acerta carros que nunca viu.
+          </p>
+
+          <div class="controls validation-controls">
+            <label class="select-field" for="validation-select">
+              <span>CSV de validação</span>
+              <select
+                id="validation-select"
+                v-model="validationCsv"
+                :disabled="csvFiles.length === 0"
+              >
+                <option value="" disabled>Escolha um arquivo</option>
+                <option
+                  v-for="file in csvFiles"
+                  :key="file"
+                  :value="file"
+                  :disabled="file === selectedName"
+                >
+                  {{ file }}{{ file === selectedName ? ' (usado na curva)' : '' }}
+                </option>
+              </select>
+            </label>
+
+            <input
+              ref="validationFileInput"
+              class="csv-file-input"
+              type="file"
+              accept=".csv,text/csv"
+              @change="uploadValidationCsv"
+            >
+            <button
+              type="button"
+              class="add-button"
+              :disabled="isUploadingCsv"
+              @click="openValidationPicker"
+            >
+              <span aria-hidden="true">+</span>
+              {{ isUploadingCsv ? 'Adicionando...' : 'Adicionar novo' }}
+            </button>
+
+            <button
+              type="button"
+              class="calculate-button"
+              :disabled="!validationCsv || isValidating"
+              @click="validateModel"
+            >
+              {{ isValidating ? 'Validando...' : 'Validar' }}
+            </button>
+          </div>
+
+          <p v-if="validationError" class="error-message" role="alert">
+            {{ validationError }}
+          </p>
+
+          <template v-if="validationData">
+            <div class="validation-summary">
+              <article>
+                <span>REQM no ajuste</span>
+                <strong>{{ formatReqm(validationData.train_reqm) }}</strong>
+                <small>{{ validationData.train_count }} anúncios de {{ validationData.csv_file }}</small>
+              </article>
+              <article class="validation-highlight">
+                <span>REQM na validação</span>
+                <strong>{{ formatReqm(validationData.test_reqm) }}</strong>
+                <small>{{ validationData.test_count }} anúncios de {{ validationData.test_file }}</small>
+              </article>
+              <article>
+                <span>Variação do erro</span>
+                <strong>{{ reqmChange() }}</strong>
+                <small>validação em relação ao ajuste</small>
+              </article>
+              <article>
+                <span>Classificação pelo ágio</span>
+                <strong>
+                  {{ countBySituation(validationData.rows).fair }} justos ·
+                  {{ countBySituation(validationData.rows).above }} acima ·
+                  {{ countBySituation(validationData.rows).bargain }} barganhas
+                </strong>
+                <small>mesmo critério de ±10%</small>
+              </article>
+            </div>
+
+            <p
+              v-if="validationData.rows.some((row) => row.fora_da_faixa)"
+              class="validation-warning"
+            >
+              {{ validationData.rows.filter((row) => row.fora_da_faixa).length }}
+              anúncio(s) têm ano ou km fora da faixa de {{ validationData.csv_file }}
+              (marcados com ✕): nesses pontos a curva está extrapolando.
+            </p>
+
+            <div
+              ref="validationChart"
+              class="agio-chart validation-chart"
+              aria-label="Gráfico do preço real contra o preço previsto pela curva"
+            ></div>
+
+            <div class="table-wrap validation-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Ano</th>
+                    <th scope="col">Quilometragem</th>
+                    <th scope="col">Preço anunciado</th>
+                    <th scope="col">Preço previsto</th>
+                    <th scope="col">Erro</th>
+                    <th scope="col">Ágio</th>
+                    <th scope="col">Situação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(row, index) in validationData.rows"
+                    :key="`validacao-${row.ano}-${row.km}-${index}`"
+                  >
+                    <td>
+                      <span class="year-badge">{{ row.ano }}</span>
+                      <span v-if="row.fora_da_faixa" class="out-of-range" title="Fora da faixa da curva">✕</span>
+                    </td>
+                    <td>{{ formatKm(row.km) }}</td>
+                    <td class="price-cell">{{ formatCurrency(row.preco) }}</td>
+                    <td>{{ formatCurrency(row.estimado) }}</td>
+                    <td class="agio-cell">{{ formatCurrency(row.erro) }}</td>
+                    <td class="agio-cell">{{ formatAgio(row.agio) }}</td>
+                    <td>
+                      <span class="situation-badge" :class="vehicleSituationClass(row.agio)">
+                        {{ vehicleSituation(row.agio) }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </div>
       </section>
 
       <section v-if="modelData" class="estimate-card" aria-labelledby="estimate-title">
