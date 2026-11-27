@@ -18,7 +18,7 @@ from preco_de_mercado import (
 
 app = Flask(__name__)
 
-SUPPORTED_MODEL_DEGREES = (0, 1, 2, 3)
+SUPPORTED_MODEL_DEGREES = (0, 1, 2, 3, 15)
 
 
 class CalculationCache:
@@ -370,9 +370,9 @@ def calcular_modelos_csv(csv_name):
     try:
         grau = int(request.args.get("grau", 2))
     except (TypeError, ValueError):
-        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 3."}), 400
+        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 15."}), 400
     if grau not in SUPPORTED_MODEL_DEGREES:
-        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 3."}), 400
+        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 15."}), 400
 
     models = calculation_cache.get_models(csv_name, grau)
     if models is None:
@@ -437,7 +437,7 @@ def estimar_preco_csv(csv_name):
         return jsonify({"error": "Nao foi possivel normalizar os dados."}), 422
 
     if grau not in SUPPORTED_MODEL_DEGREES:
-        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 3."}), 400
+        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 15."}), 400
 
     models = calculation_cache.get_models(csv_name, grau)
     if models is None:
@@ -478,9 +478,9 @@ def validar_modelo_csv(csv_name):
     try:
         grau = int(request.args.get("grau", 2))
     except (TypeError, ValueError):
-        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 3."}), 400
+        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 15."}), 400
     if grau not in SUPPORTED_MODEL_DEGREES:
-        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 3."}), 400
+        return jsonify({"error": "O grau deve ser um inteiro entre 0 e 15."}), 400
 
     models = calculation_cache.get_models(csv_name, grau)
     normalized = calculation_cache.get_normalized(csv_name)
