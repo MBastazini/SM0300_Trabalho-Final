@@ -80,18 +80,13 @@ def normaliza_matriz(dados):
     return data
 
 
-def matriz_planejamento(A, K, tipo):
-    """Matriz X do ajuste: [1 | A | K] no linear e [1 | A | K | A² | AK | K²] no quadrático."""
-    return mq.montar_matriz_X([A, K], tipo)
-
-
 def depreciacao(ano, km, c, grau, data):
     """Queda de preço (R$ e %) do carro (ano, km) com +8000 km, +10000 km e 1 ano a mais de idade."""
-    atual = estima_valor({'ano': ano, 'km': km}, tipo, data, c)
+    atual = estima_valor({'ano': ano, 'km': km}, grau, data, c)
     quedas = {
-        '+8000 km': atual - estima_valor({'ano': ano, 'km': km + 8000}, tipo, data, c),
-        '+10000 km': atual - estima_valor({'ano': ano, 'km': km + 10000}, tipo, data, c),
-        '1 ano mais velho': atual - estima_valor({'ano': ano - 1, 'km': km}, tipo, data, c),
+        '+8000 km': atual - estima_valor({'ano': ano, 'km': km + 8000}, grau, data, c),
+        '+10000 km': atual - estima_valor({'ano': ano, 'km': km + 10000}, grau, data, c),
+        '1 ano mais velho': atual - estima_valor({'ano': ano - 1, 'km': km}, grau, data, c),
     }
     return atual, {nome: (queda, 100 * queda / atual) for nome, queda in quedas.items()}
 
@@ -146,7 +141,7 @@ def relatorio(dados, nome='carro', ano_carro=None, km_carro=None, pasta=PASTA_GR
         print("-" * largura)
 
         # PASSO 3: sistema linear (equações normais) e solução
-        M, b, c = mq.solucao_sistema([data['ano'], data['km']], data['preco'], tipo)
+        M, b, c = mq.solucao_sistema([data['ano'], data['km']], data['preco'], grau)
         print("\nPASSO 3 - SISTEMA DE EQUAÇÕES NORMAIS")
         print("  (X^T X) c = X^T y")
         print("  M = X^T X")
@@ -159,7 +154,7 @@ def relatorio(dados, nome='carro', ano_carro=None, km_carro=None, pasta=PASTA_GR
                             arquivo=pasta / f"{prefixo}_superficie_{sufixo}.png")
 
         # Preço estimado de cada anúncio, em reais
-        X = matriz_planejamento(data['ano'], data['km'], tipo)
+        X = mq.montar_matriz_X([data['ano'], data['km']], grau)
         estimado = mq.desnormalize_test_values(X @ c, data['preco_stats'])
 
         # PASSO 4: REQM

@@ -70,21 +70,21 @@ def estima_valor(variaveis, grau, data, c, variavel_alvo="preco"):
         raise ValueError("'variaveis' deve ser um dicionário não vazio (ex.: {'ano': 2022, 'km': 48000}).")
 
     if f"{variavel_alvo}_stats" not in data:
-        raise ValueError(f"Missing normalization stats for target '{variavel_alvo}' in data.")
+        raise ValueError(f"Faltando status normalizado para '{variavel_alvo}' na data.")
 
     entrada_escalar = all(np.ndim(v) == 0 for v in variaveis.values())
 
     variaveis_normalizadas = []
     for nome, valor in variaveis.items():
         if f"{nome}_stats" not in data:
-            raise ValueError(f"Missing normalization stats for variable '{nome}' in data.")
+            raise ValueError(f"Faltando status normalizado para a variável '{nome}' na data.")
         variaveis_normalizadas.append(mq.normalize_test_values(valor, data[f"{nome}_stats"]))
 
     matriz_X = mq.montar_matriz_X(variaveis_normalizadas, grau)
 
     # Confere se os coeficientes c têm o tamanho correto para a matriz_X
     if matriz_X.shape[1] != len(c):
-        raise ValueError(f"Mismatch between number of coefficients ({len(c)}) and number of features ({matriz_X.shape[1]}).")
+        raise ValueError(f"Diferença entre a quantidade de coeficientes ({len(c)}) e o número de colunas na matriz X ({matriz_X.shape[1]}).")
 
     estimativa = mq.desnormalize_test_values(matriz_X @ c, data[f"{variavel_alvo}_stats"])
 

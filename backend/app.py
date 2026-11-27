@@ -518,7 +518,7 @@ def validar_modelo_csv(csv_name):
         for d in range(grau + 1)
         for j in range(d + 1)
     ])
-    estimated_price = desnormalize_values(x_polynomial @ coefficients, price_stats)
+    estimated_price = mq.desnormalize_test_values(x_polynomial @ coefficients, price_stats)
 
     reqm = float(mq.REQM(estimated_price, preco))
     agio = mq.agio_percentual(estimated_price, preco)
